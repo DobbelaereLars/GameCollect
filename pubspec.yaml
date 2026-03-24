@@ -1,5 +1,5 @@
 name: gamecollect
-description: "A new Flutter project."
+description: 'GameCollect is een Flutter-app waarmee gebruikers hun fysieke en digitale gamecollectie kunnen beheren, organiseren en opvolgen. De app focust op een overzichtelijke covergrid, backlog-status, persoonlijke tags en het bijhouden van voortgang richting het uitspelen of 100% completen van games.'
 publish_to: 'none'
 version: 0.1.0
 
@@ -17,3 +17,20 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-ExtraLight.ttf
+          weight: 200
+        - asset: assets/fonts/Manrope-Light.ttf
+          weight: 300
+        - asset: assets/fonts/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-ExtraBold.ttf
+          weight: 800
