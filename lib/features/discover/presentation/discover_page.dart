@@ -192,7 +192,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
-              color: const Color(0xF5FFFFFF),
+              color: AppTheme.glassLight,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Column(
@@ -208,14 +208,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       decoration: InputDecoration(
                         hintText: 'Zoek games...',
                         hintStyle: textTheme.bodyLarge?.copyWith(
-                          color: const Color(0x99000000),
+                          color: AppTheme.grayTransparent50,
                         ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           vertical: 10,
                         ),
                         filled: true,
-                        fillColor: const Color(0xFFFFF4EB),
+                        fillColor: AppTheme.orange50,
                         prefixIcon: const Icon(
                           LucideIcons.search,
                           color: AppTheme.orange500,
@@ -315,7 +315,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             fit: StackFit.expand,
             children: [
               Container(
-                color: const Color(0xFFFFF4EB),
+                color: AppTheme.orange50,
                 child: game.coverUrl == null
                     ? const Icon(
                         LucideIcons.gamepad2,
@@ -345,9 +345,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Color(0x00000000),
-                        Color(0x66000000),
-                        Color(0xCC000000),
+                        AppTheme.blackTransparent0,
+                        AppTheme.blackTransparent40,
+                        AppTheme.blackTransparent80,
                       ],
                     ),
                   ),

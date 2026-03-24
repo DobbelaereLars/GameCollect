@@ -28,7 +28,7 @@ class AppBottomNavigation extends StatelessWidget {
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppTheme.orange500,
           unselectedItemColor: AppTheme.black,
-          backgroundColor: const Color(0xF5FFFFFF),
+          backgroundColor: AppTheme.glassLight,
           elevation: 0,
           showUnselectedLabels: true,
           selectedFontSize: 12,
