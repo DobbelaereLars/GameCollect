@@ -93,6 +93,13 @@ class AppTheme {
         surface: white,
         onSurface: black,
       ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: orange500,
+        contentTextStyle: baseTheme.textTheme.bodyMedium?.copyWith(
+          fontFamily: 'Manrope',
+          color: white,
+        ),
+      ),
     );
   }
 }

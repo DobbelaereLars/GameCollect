@@ -1,13 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../data/game_cover_ocr_service.dart';
+import '../data/rawg_games_api.dart';
+import '../domain/rawg_game.dart';
+import 'widgets/discover_search_bar.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
@@ -22,16 +27,30 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
 
+  bool get _showCameraButton {
+    if (kIsWeb) {
+      return false;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+  }
+
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final http.Client _httpClient = http.Client();
+  final ImagePicker _imagePicker = ImagePicker();
+  final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
+  final GameCoverOcrService _ocrService = GameCoverOcrService();
 
   Timer? _debounce;
   bool _isInitialLoading = false;
   bool _isLoadingMore = false;
+  bool _isOpeningCamera = false;
+  bool _isRecognizingCover = false;
   String? _errorMessage;
   String _activeQuery = '';
-  List<_RawgGame> _games = const [];
+  List<RawgGame> _games = const [];
   String? _nextPageUrl;
 
   @override
@@ -44,6 +63,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _ocrService.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     _httpClient.close();
@@ -96,39 +116,22 @@ class _DiscoverPageState extends State<DiscoverPage> {
     });
 
     try {
-      final uri = loadMore
-          ? Uri.parse(_nextPageUrl!)
-          : Uri.https('api.rawg.io', '/api/games', {
-              'key': _rawgApiKey,
-              'page_size': '$_pageSize',
-              'ordering': '-added',
-              if (_activeQuery.isNotEmpty) 'search': _activeQuery,
-            });
-
-      final response = await _httpClient
-          .get(uri)
-          .timeout(const Duration(seconds: 12));
-
-      if (response.statusCode != 200) {
-        throw Exception('RAWG request mislukt (${response.statusCode}).');
-      }
-
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final results = decoded['results'] as List<dynamic>? ?? const [];
-      final nextPageUrl = decoded['next'] as String?;
-
-      final games = results
-          .whereType<Map<String, dynamic>>()
-          .map(_RawgGame.fromJson)
-          .toList(growable: false);
+      final page = await _rawgGamesApi.fetchGames(
+        client: _httpClient,
+        apiKey: _rawgApiKey,
+        pageSize: _pageSize,
+        activeQuery: _activeQuery,
+        nextPageUrl: loadMore ? _nextPageUrl : null,
+      );
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _games = loadMore ? [..._games, ...games] : games;
-        _nextPageUrl = nextPageUrl;
+        final mergedGames = loadMore ? [..._games, ...page.games] : page.games;
+        _games = _sortGamesByRelevance(mergedGames, _activeQuery);
+        _nextPageUrl = page.nextPageUrl;
       });
     } catch (error) {
       if (!mounted) {
@@ -180,6 +183,231 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _fetchGames(reset: true);
   }
 
+  void _clearSearch() {
+    _debounce?.cancel();
+
+    if (_searchController.text.isEmpty && _activeQuery.isEmpty) {
+      return;
+    }
+
+    _searchController.clear();
+    _activeQuery = '';
+    _fetchGames(reset: true);
+  }
+
+  List<RawgGame> _sortGamesByRelevance(List<RawgGame> games, String query) {
+    final normalizedQuery = _normalizeSearchText(query);
+    if (normalizedQuery.isEmpty) {
+      return games;
+    }
+
+    final queryTokens = normalizedQuery
+        .split(' ')
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+
+    final sorted = [...games];
+    sorted.sort((a, b) {
+      final scoreA = _scoreGameRelevance(a.title, normalizedQuery, queryTokens);
+      final scoreB = _scoreGameRelevance(b.title, normalizedQuery, queryTokens);
+
+      if (scoreA != scoreB) {
+        return scoreB.compareTo(scoreA);
+      }
+
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+
+    return sorted;
+  }
+
+  String _normalizeSearchText(String value) {
+    final lowercase = value.toLowerCase();
+    final noSpecialChars = lowercase.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
+    return noSpecialChars.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  int _scoreGameRelevance(
+    String title,
+    String normalizedQuery,
+    List<String> queryTokens,
+  ) {
+    final normalizedTitle = _normalizeSearchText(title);
+    var score = 0;
+
+    if (normalizedTitle == normalizedQuery) {
+      score += 10000;
+    }
+
+    if (normalizedTitle.startsWith(normalizedQuery)) {
+      score += 7000;
+    }
+
+    if (normalizedTitle.contains(normalizedQuery)) {
+      score += 4500;
+    }
+
+    var matchedTokens = 0;
+    for (final token in queryTokens) {
+      if (normalizedTitle.contains(token)) {
+        matchedTokens++;
+      }
+    }
+
+    if (matchedTokens == queryTokens.length) {
+      score += 3000;
+    }
+
+    score += matchedTokens * 220;
+    score -= (queryTokens.length - matchedTokens) * 600;
+
+    final lengthDiff = (normalizedTitle.length - normalizedQuery.length).abs();
+    score += (300 - (lengthDiff * 8)).clamp(0, 300);
+
+    return score;
+  }
+
+  Future<bool> _isLikelyGameCoverQuery({
+    required OcrCoverResult result,
+  }) async {
+    Future<int> bestScoreForQuery(String query) async {
+      final page = await _rawgGamesApi.fetchGames(
+        client: _httpClient,
+        apiKey: _rawgApiKey,
+        pageSize: 5,
+        activeQuery: query,
+      );
+
+      if (page.games.isEmpty) {
+        return -1;
+      }
+
+      final normalizedQuery = _normalizeSearchText(query);
+      final tokens = normalizedQuery
+          .split(' ')
+          .where((token) => token.isNotEmpty)
+          .toList(growable: false);
+
+      var best = -1;
+      for (final game in page.games) {
+        final score = _scoreGameRelevance(game.title, normalizedQuery, tokens);
+        if (score > best) {
+          best = score;
+        }
+      }
+
+      return best;
+    }
+
+    final queriesToCheck = [
+      result.query,
+      ...result.candidates.where((candidate) => candidate != result.query),
+    ];
+
+    var bestOverall = -1;
+    for (final query in queriesToCheck.take(3)) {
+      final score = await bestScoreForQuery(query);
+      if (score > bestOverall) {
+        bestOverall = score;
+      }
+    }
+
+    if (result.isLikelyGameCover) {
+      return bestOverall >= 3600;
+    }
+
+    // For uncertain OCR captures, be stricter.
+    return bestOverall >= 6500;
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
+  }
+
+  Future<void> _openCamera() async {
+    if (_isOpeningCamera || _isRecognizingCover) {
+      return;
+    }
+
+    setState(() {
+      _isOpeningCamera = true;
+    });
+
+    XFile? photo;
+    try {
+      photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+    } catch (_) {
+      _showSnackBar('Camera kon niet worden geopend.');
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isOpeningCamera = false;
+        });
+      }
+    }
+
+    if (photo == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isRecognizingCover = true;
+    });
+
+    try {
+      final result = await _ocrService.extractQueryFromImagePath(photo.path);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (result == null || result.query.isEmpty) {
+        _showSnackBar('Geen gametitel herkend op de cover.');
+        return;
+      }
+
+      final isLikelyCover = await _isLikelyGameCoverQuery(result: result);
+      if (!mounted) {
+        return;
+      }
+
+      if (!isLikelyCover) {
+        _showSnackBar('Dit lijkt geen gamecover. Probeer een duidelijke coverfoto.');
+        return;
+      }
+
+      final query = result.query;
+
+      _searchController.text = query;
+      _searchController.selection = TextSelection.collapsed(
+        offset: query.length,
+      );
+
+      _onSearchSubmitted(query);
+      _showSnackBar('Zoeken op: $query');
+    } catch (_) {
+      _showSnackBar('Foto kon niet verwerkt worden. Probeer opnieuw.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRecognizingCover = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -197,49 +425,15 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Column(
                   children: [
-                    TextField(
+                    DiscoverSearchBar(
                       controller: _searchController,
-                      textInputAction: TextInputAction.search,
                       onChanged: _onSearchChanged,
                       onSubmitted: _onSearchSubmitted,
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: AppTheme.black,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Zoek games...',
-                        hintStyle: textTheme.bodyLarge?.copyWith(
-                          color: AppTheme.grayTransparent50,
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                        ),
-                        filled: true,
-                        fillColor: AppTheme.orange50,
-                        prefixIcon: const Icon(
-                          LucideIcons.search,
-                          color: AppTheme.orange500,
-                          size: 20,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFFC299),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFFC299),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.orange500,
-                          ),
-                        ),
-                      ),
+                      onClearPressed: _clearSearch,
+                      showCameraButton: _showCameraButton,
+                      onCameraPressed: _openCamera,
+                      isCameraBusy: _isRecognizingCover,
+                      isCameraDisabled: _isOpeningCamera || _isRecognizingCover,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -366,20 +560,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
           ),
         );
       },
-    );
-  }
-}
-
-class _RawgGame {
-  const _RawgGame({required this.title, required this.coverUrl});
-
-  final String title;
-  final String? coverUrl;
-
-  factory _RawgGame.fromJson(Map<String, dynamic> json) {
-    return _RawgGame(
-      title: json['name'] as String? ?? 'Onbekende game',
-      coverUrl: json['background_image'] as String?,
     );
   }
 }
