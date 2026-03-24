@@ -50,6 +50,7 @@ class _GameCollectShellState extends State<GameCollectShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: _tabs.map((tab) => tab.page).toList(),
