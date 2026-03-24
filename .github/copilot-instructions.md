@@ -72,10 +72,31 @@ Semantisch gebruik:
 - Accent subtle backgrounds/chips: Orange 50-100
 - Accent text on white: Orange 700 of donkerder voor voldoende contrast
 
+## Iconography
+
+Gebruik Lucide als standaard iconset in dit project.
+
+- Package: lucide_icons_flutter
+- Vermijd mixen van meerdere iconsets binnen hetzelfde scherm, tenzij expliciet gevraagd.
+- Gebruik icongroottes consistent (bij voorkeur 16, 20 of 24).
+- Gebruik standaard iconkleur zwart (#000000), of een oranje accentkleur uit het palette voor interactieve elementen.
+- Houd iconstijl lijngebaseerd en visueel consistent met de rest van de UI.
+
+## Platform Priority
+
+Ontwikkel en test iOS als primaire target tijdens de implementatiefase.
+
+- Primary device: iOS
+- Prioriteer iOS-gedrag, spacing en navigatiepatronen tijdens development.
+- Zorg dat code platform-neutraal blijft, zodat Android later zonder grote refactor ondersteund blijft.
+- Android-optimalisatie en fine-tuning gebeuren pas op het einde.
+
 ## Implementatie-instructies voor AI
 
 - Introduceer geen extra kleuren buiten zwart, wit en dit oranje palette, tenzij expliciet gevraagd.
 - Gebruik geen dark theme tenzij expliciet gevraagd.
 - Houd typografie consistent met bovenstaande schaal.
 - Gebruik geen andere font family tenzij expliciet gevraagd.
+- Gebruik Lucide icons via lucide_icons_flutter als standaard iconbron.
+- Hanteer iOS als primaire testdoelstelling tijdens featureontwikkeling.
 - Bij nieuwe schermen: pas deze tokens toe in ThemeData, TextTheme en component styles.
