@@ -722,6 +722,14 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
                   ).textTheme.bodyMedium?.copyWith(color: AppTheme.gray700),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+                  child: const Text('Annuleren'),
+                ),
               ],
             ],
           ),
