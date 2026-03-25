@@ -678,13 +678,12 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
       key: const ValueKey('loading'),
       alignment: Alignment.center,
       children: [
-        // Hidden rendering of webview off-screen to prevent covering Flutter UI
-        Positioned(
-          left: -1000,
-          top: -1000,
+        // Hidden rendering of webview (needs to have size + opacity to bypass lazy-loading/rendering optimizations of WebKit)
+        Opacity(
+          opacity: 0.01,
           child: SizedBox(
-            height: 10,
-            width: 10,
+            height: 150,
+            width: 150,
             child: CustomLensUploadView(
               key: ValueKey(_retryKey),
               imageFile: widget.photoFile,
@@ -698,7 +697,9 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
           ),
         ),
         // App-native Loading UI
-        Padding(
+        Container(
+          color: AppTheme
+              .white, // Covers the tiny dot of 0.01 opacity just in case
           padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -727,7 +728,9 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.gray700,
+                  ),
                   child: const Text('Annuleren'),
                 ),
               ],

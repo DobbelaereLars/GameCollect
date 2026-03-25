@@ -37,8 +37,31 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
   @override
   void initState() {
     super.initState();
+
+    // Voorkom de Google Cookie popup ("Voordat je verdergaat")
+    final cookieManager = WebViewCookieManager();
+    cookieManager.setCookie(
+      const WebViewCookie(
+        name: 'CONSENT',
+        value: 'YES+cb.20230501-00-p0.base+FX+343',
+        domain: '.google.com',
+        path: '/',
+      ),
+    );
+    cookieManager.setCookie(
+      const WebViewCookie(
+        name: 'SOCS',
+        value: 'CAESHAgBEhJnd3NfMjAyMzA4MDktMF9SQzIaAm5sIAEaBgiA_LyaBg',
+        domain: '.google.com',
+        path: '/',
+      ),
+    );
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1',
+      )
       ..addJavaScriptChannel(
         'CustomResultHandler',
         onMessageReceived: (msg) {
@@ -177,6 +200,21 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     try{ window.CustomResultHandler && window.CustomResultHandler.postMessage((t||'') + "\\n" + (d||'')); }catch(_){}
   }
 
+  // Controleer direct of er een Google Cookie / GDPR popup in beeld staat en klik deze automatisch weg.
+  const buttons = document.querySelectorAll('button, [role="button"], span');
+  for (const b of buttons) {
+    const bText = (b.innerText || '').toLowerCase().trim();
+    if (bText === 'alles accepteren' || bText === 'akkoord' || bText === 'accept all' || bText === 'accepteren') {
+       postStatus('Cookies accepteren...');
+       b.click();
+       return; // Webview zal na de klik vanzelf navigeren, scraper wordt daarna opnieuw geladen.
+    }
+  }
+
+  // Google triggers AI Overviews (SGE) sneller als er een beetje gescrolld is of getikt.
+  // We triggeren een soepele scroll naar beneden.
+  window.scrollBy({ top: 400, left: 0, behavior: 'smooth' });
+
   // Google constantly changes DOM. We use generic scraping tactics.
   function scrapeAndPost(){
     let title = '';
@@ -184,19 +222,38 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     let isGameRelated = false;
     let foundBoldText = false;
 
-    // Check if the page contains words that indicate it's a game/console
+    // Vervang alle vaste keywords met uitsluitend een strikte check op het woord "spel" of "game".
+    // Door \b (woordgrenzen) te gebruiken, keuren we "spelcomputer" of "spelcontroller" af, 
+    // want die hebben geen scheidingsteken. Iets als "3Ds-spel" of "ps4-game" mag wel door.
     const lowerBody = document.body.innerText.toLowerCase();
-    if (lowerBody.includes('game') || lowerBody.includes('playstation') || lowerBody.includes('xbox') || lowerBody.includes('nintendo') || lowerBody.includes('wii') || lowerBody.includes('sega')) {
+    
+    const gameMatches = lowerBody.match(/\\b(game|games|spel|spellen)\\b/g);
+    if (gameMatches && gameMatches.length > 0) {
       isGameRelated = true;
     }
 
+    // Veranderd: filter metadata lables eruit
+    const invalidTitleKeywords = ['zoekresultaten', 'visuele overeenkomsten', 'overzicht'];
+    
     // Tactic 1: Look for bold text within an AI overview or a descriptive paragraph
     const boldElements = document.querySelectorAll('b, strong');
     for (const el of boldElements) {
       const text = el.innerText.trim();
-      if (text.length > 2 && text.length < 60 && !text.toLowerCase().includes('zoekresultaten')) {
+      const lowerText = text.toLowerCase();
+      
+      const isSkippedKeyword = invalidTitleKeywords.some(keyword => lowerText.includes(keyword));
+      
+      if (text.length > 2 && text.length < 60 && !isSkippedKeyword) {
          const parentText = (el.parentElement.innerText || '').trim();
          if (parentText.length > 20 && parentText.length < 400) { 
+            const isSingleWordWithColon = !lowerText.includes(' ') && lowerText.endsWith(':');
+            const isInvalidMetadata = ['platform', 'genre', 'model', 'accountnaam', 'account', 'username', 'gebruikersnaam'].includes(lowerText);
+            
+            if (isSingleWordWithColon || isInvalidMetadata) {
+               postResult("ERROR_NOT_A_GAME", "");
+               return;
+            }
+            
             title = text;
             foundBoldText = true;
             break;
@@ -209,25 +266,52 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
        const headings = document.querySelectorAll('h1, h2, h3, .BVG0Nb, .g h3');
        for (const h of headings) {
           const text = h.innerText.trim();
-          if (text.length > 2 && 
-              !text.toLowerCase().includes('zoekresultaten') && 
-              !text.toLowerCase().includes('visuele overeenkomsten') &&
-              !text.toLowerCase().includes('overzicht')) {
+          const lowerText = text.toLowerCase();
+          
+          const isSkippedKeyword = invalidTitleKeywords.some(keyword => lowerText.includes(keyword));
+          
+          if (text.length > 2 && !isSkippedKeyword) {
+             const isSingleWordWithColon = !lowerText.includes(' ') && lowerText.endsWith(':');
+             const isInvalidMetadata = ['platform', 'genre', 'model', 'accountnaam', 'account', 'username', 'gebruikersnaam'].includes(lowerText);
+             
+             if (isSingleWordWithColon || isInvalidMetadata) {
+                postResult("ERROR_NOT_A_GAME", "");
+                return;
+             }
+             
              title = text;
              break;
           }
        }
     }
 
-    // If completely empty or no bold text found (AI overview niet getriggerd)
-    if (!foundBoldText || !title) {
-       postResult("ERROR_NO_RESULTS", "");
+    // Extra check op ongewenste onderwerpen (zoals hardware of programmeer-software) in de titel
+    if (title) {
+       const lowerTitle = title.toLowerCase();
+       const negativeKeywords = [
+           'console', 'controller', 'headset', 'ssd', 'hard drive', 'harde schijf', 
+           'laptop', 'monitor', 'televisie', 'television', 'muis', 'mouse', 
+           'toetsenbord', 'keyboard', 'smartphone', 'iphone', 'tablet',
+           'visual studio', 'code editor', 'oordopjes', 'earbuds',
+           'portable ssd', 'solid state', 'kabel', 'cable', 'hoesje', 'case'
+       ];
+       for (const nkw of negativeKeywords) {
+         if (lowerTitle.includes(nkw) || (lowerTitle === 'playstation 5' || lowerTitle === 'xbox series x')) {
+            postResult("ERROR_NOT_A_GAME", "");
+            return;
+         }
+       }
+    }
+
+    // VOORDAT WE RESULTATEN POSTEN, CHECK EERST OF HET EEN GAME IS.
+    if (!isGameRelated) {
+       postResult("ERROR_NOT_A_GAME", "");
        return;
     }
 
-    // if we found a title but the overall page doesn't mention game keywords
-    if (!isGameRelated) {
-       postResult("ERROR_NOT_A_GAME", "");
+    // If completely empty or no bold text found (AI overview niet getriggerd)
+    if (!foundBoldText || !title) {
+       postResult("ERROR_NO_RESULTS", "");
        return;
     }
 
