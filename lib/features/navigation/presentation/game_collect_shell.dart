@@ -9,6 +9,23 @@ import '../../progress/presentation/progress_page.dart';
 import '../domain/navigation_tab.dart';
 import 'widgets/app_bottom_navigation.dart';
 
+class _TabNavigator extends StatelessWidget {
+  const _TabNavigator({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      onGenerateRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (context) => child,
+        );
+      },
+    );
+  }
+}
+
 class GameCollectShell extends StatefulWidget {
   const GameCollectShell({super.key});
 
@@ -19,31 +36,31 @@ class GameCollectShell extends StatefulWidget {
 class _GameCollectShellState extends State<GameCollectShell> {
   int _currentIndex = 0;
 
-  late final List<NavigationTab> _tabs = const [
-    NavigationTab(
+  late final List<NavigationTab> _tabs = [
+    const NavigationTab(
       label: 'Overzicht',
       icon: LucideIcons.house,
-      page: OverviewPage(),
+      page: _TabNavigator(child: OverviewPage()),
     ),
-    NavigationTab(
+    const NavigationTab(
       label: 'Collectie',
       icon: LucideIcons.library,
-      page: CollectionPage(),
+      page: _TabNavigator(child: CollectionPage()),
     ),
-    NavigationTab(
+    const NavigationTab(
       label: 'Ontdekken',
       icon: LucideIcons.search,
-      page: DiscoverPage(),
+      page: _TabNavigator(child: DiscoverPage()),
     ),
-    NavigationTab(
+    const NavigationTab(
       label: 'Voortgang',
       icon: LucideIcons.listChecks,
-      page: ProgressPage(),
+      page: _TabNavigator(child: ProgressPage()),
     ),
-    NavigationTab(
+    const NavigationTab(
       label: 'Achievements',
       icon: LucideIcons.trophy,
-      page: AchievementsPage(),
+      page: _TabNavigator(child: AchievementsPage()),
     ),
   ];
 

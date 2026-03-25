@@ -48,4 +48,23 @@ class RawgGamesApi {
 
     return RawgGamesPage(games: games, nextPageUrl: next);
   }
+
+  Future<RawgGameDetails> fetchGameDetails({
+    required http.Client client,
+    required String apiKey,
+    required int id,
+  }) async {
+    final uri = Uri.https('api.rawg.io', '/api/games/$id', {
+      'key': apiKey,
+    });
+
+    final response = await client.get(uri).timeout(const Duration(seconds: 12));
+
+    if (response.statusCode != 200) {
+      throw Exception('RAWG request mislukt (${response.statusCode}).');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return RawgGameDetails.fromJson(decoded);
+  }
 }

@@ -13,6 +13,7 @@ import 'dart:io';
 import '../../../core/theme/app_theme.dart';
 import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
+import 'game_detail_page.dart';
 import 'widgets/discover_search_bar.dart';
 
 class DiscoverPage extends StatefulWidget {
@@ -550,16 +551,28 @@ class _DiscoverPageState extends State<DiscoverPage> {
         }
 
         final game = _games[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(
-                color: AppTheme.orange50,
-                child: game.coverUrl == null
-                    ? const Icon(
-                        LucideIcons.gamepad2,
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => GameDetailPage(
+                  gameId: game.id,
+                  fallbackTitle: game.title,
+                  fallbackCoverUrl: game.coverUrl,
+                ),
+              ),
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: AppTheme.orange50,
+                  child: game.coverUrl == null
+                      ? const Icon(
+                          LucideIcons.gamepad2,
                         size: 34,
                         color: AppTheme.black,
                       )
@@ -605,10 +618,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
               ),
             ],
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 }
 
 class _CameraSearchDialog extends StatefulWidget {
