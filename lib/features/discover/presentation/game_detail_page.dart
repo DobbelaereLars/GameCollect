@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/database/database_helper.dart';
+import '../../collection/presentation/widgets/add_to_collection_sheet.dart';
 import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
 
@@ -35,6 +37,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   RawgGameDetails? _gameDetails;
   Timer? _slowConnectionTimer;
   bool _isSlowConnection = false;
+  bool _isAlreadyInCollection = false;
 
   String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
 
@@ -42,10 +45,24 @@ class _GameDetailPageState extends State<GameDetailPage> {
   void initState() {
     super.initState();
     _fetchGameDetails();
+    _checkIfInCollection();
+    DatabaseHelper.instance.addListener(_checkIfInCollection);
+  }
+
+  Future<void> _checkIfInCollection() async {
+    final inCollection = await DatabaseHelper.instance.isGameInCollection(
+      widget.gameId,
+    );
+    if (mounted) {
+      setState(() {
+        _isAlreadyInCollection = inCollection;
+      });
+    }
   }
 
   @override
   void dispose() {
+    DatabaseHelper.instance.removeListener(_checkIfInCollection);
     _httpClient.close();
     _slowConnectionTimer?.cancel();
     super.dispose();
@@ -221,7 +238,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
             ),
 
           Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -272,7 +289,46 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   ),
                   const SizedBox(height: 24),
                 ],
-
+                // Add to Collection Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isAlreadyInCollection
+                        ? null // Disable if already in collection
+                        : () async {
+                            await AddToCollectionSheet.show(context, game);
+                            _checkIfInCollection();
+                          },
+                    icon: Icon(
+                      _isAlreadyInCollection
+                          ? LucideIcons.check
+                          : LucideIcons.plus,
+                      size: 20,
+                    ),
+                    label: Text(
+                      _isAlreadyInCollection
+                          ? 'Toegevoegd aan collectie'
+                          : 'Toevoegen aan collectie',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.white,
+                      foregroundColor: AppTheme.orange500,
+                      disabledBackgroundColor: AppTheme.orange500,
+                      disabledForegroundColor: AppTheme.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(
+                          color: AppTheme.orange500,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 // Platform tags
                 if (game.platforms.isNotEmpty) ...[
                   Text(
