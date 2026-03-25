@@ -18,9 +18,7 @@ class _TabNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Navigator(
       onGenerateRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (context) => child,
-        );
+        return MaterialPageRoute(builder: (context) => child);
       },
     );
   }

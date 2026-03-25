@@ -73,18 +73,26 @@ class RawgGameDetails {
     final esrb = json['esrb_rating'] as Map<String, dynamic>?;
     String? ageRatingName = esrb?['name'] as String?;
     if (ageRatingName != null) {
-      if (ageRatingName == 'Everyone') ageRatingName = 'Alle leeftijden (Everyone)';
-      else if (ageRatingName == 'Everyone 10+') ageRatingName = '10+ (Everyone 10+)';
-      else if (ageRatingName == 'Teen') ageRatingName = '13+ (Teen)';
-      else if (ageRatingName == 'Mature') ageRatingName = '17+ (Mature)';
-      else if (ageRatingName == 'Adults Only') ageRatingName = '18+ (Adults Only)';
-      else if (ageRatingName == 'Rating Pending') ageRatingName = 'Beoordeling in afwachting';
+      if (ageRatingName == 'Everyone')
+        ageRatingName = 'Alle leeftijden (Everyone)';
+      else if (ageRatingName == 'Everyone 10+')
+        ageRatingName = '10+ (Everyone 10+)';
+      else if (ageRatingName == 'Teen')
+        ageRatingName = '13+ (Teen)';
+      else if (ageRatingName == 'Mature')
+        ageRatingName = '17+ (Mature)';
+      else if (ageRatingName == 'Adults Only')
+        ageRatingName = '18+ (Adults Only)';
+      else if (ageRatingName == 'Rating Pending')
+        ageRatingName = 'Beoordeling in afwachting';
     }
 
     return RawgGameDetails(
       id: json['id'] as int? ?? 0,
       title: json['name'] as String? ?? 'Onbekende game',
-      description: json['description_raw'] as String? ?? 'Geen omschrijving beschikbaar.',
+      description:
+          json['description_raw'] as String? ??
+          'Geen omschrijving beschikbaar.',
       coverUrl: json['background_image'] as String?,
       released: json['released'] as String?,
       rating: (json['rating'] as num?)?.toDouble(),

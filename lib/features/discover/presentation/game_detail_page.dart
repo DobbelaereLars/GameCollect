@@ -29,7 +29,7 @@ class GameDetailPage extends StatefulWidget {
 class _GameDetailPageState extends State<GameDetailPage> {
   final http.Client _httpClient = http.Client();
   final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
-  
+
   bool _isLoading = true;
   String? _errorMessage;
   RawgGameDetails? _gameDetails;
@@ -87,7 +87,8 @@ class _GameDetailPageState extends State<GameDetailPage> {
     } catch (error) {
       if (!mounted) return;
 
-      final isNetworkError = error is SocketException ||
+      final isNetworkError =
+          error is SocketException ||
           error is TimeoutException ||
           error.toString().contains('SocketException') ||
           error.toString().contains('ClientException');
@@ -149,7 +150,8 @@ class _GameDetailPageState extends State<GameDetailPage> {
     }
 
     if (_errorMessage != null) {
-      final isNetworkError = _errorMessage == 'Controleer je internetverbinding';
+      final isNetworkError =
+          _errorMessage == 'Controleer je internetverbinding';
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -157,7 +159,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isNetworkError ? LucideIcons.wifiOff : LucideIcons.triangleAlert,
+                isNetworkError
+                    ? LucideIcons.wifiOff
+                    : LucideIcons.triangleAlert,
                 size: 48,
                 color: AppTheme.orange500,
               ),
@@ -215,7 +219,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 },
               ),
             ),
-          
+
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
@@ -223,15 +227,21 @@ class _GameDetailPageState extends State<GameDetailPage> {
               children: [
                 Text(
                   game.title,
-                  style: textTheme.displayLarge?.copyWith(color: AppTheme.black),
+                  style: textTheme.displayLarge?.copyWith(
+                    color: AppTheme.black,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 if (game.released != null || game.rating != null) ...[
                   Row(
                     children: [
                       if (game.released != null) ...[
-                        Icon(LucideIcons.calendar, size: 16, color: AppTheme.gray700),
+                        Icon(
+                          LucideIcons.calendar,
+                          size: 16,
+                          color: AppTheme.gray700,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           game.released!,
@@ -244,7 +254,11 @@ class _GameDetailPageState extends State<GameDetailPage> {
                       if (game.released != null && game.rating != null)
                         const SizedBox(width: 16),
                       if (game.rating != null && game.rating! > 0) ...[
-                        Icon(LucideIcons.star, size: 16, color: AppTheme.orange500),
+                        Icon(
+                          LucideIcons.star,
+                          size: 16,
+                          color: AppTheme.orange500,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           game.rating!.toStringAsFixed(1),
@@ -263,7 +277,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 if (game.platforms.isNotEmpty) ...[
                   Text(
                     'Platforms',
-                    style: textTheme.titleLarge?.copyWith(color: AppTheme.black),
+                    style: textTheme.titleLarge?.copyWith(
+                      color: AppTheme.black,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -271,7 +287,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
                     runSpacing: 8,
                     children: game.platforms.map((platform) {
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.orange50,
                           borderRadius: BorderRadius.circular(8),
@@ -294,7 +313,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 if (game.description.isNotEmpty) ...[
                   Text(
                     'Over de game',
-                    style: textTheme.titleLarge?.copyWith(color: AppTheme.black),
+                    style: textTheme.titleLarge?.copyWith(
+                      color: AppTheme.black,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -308,7 +329,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
                 // Metadata list
                 _buildMetadataList(textTheme, game),
-                
+
                 // Extra padding onderaan zodat de content niet achter de (floating) bottom navigation bar valt
                 const SizedBox(height: 80),
               ],
@@ -326,13 +347,25 @@ class _GameDetailPageState extends State<GameDetailPage> {
         if (game.genres.isNotEmpty)
           _buildMetadataRow(textTheme, 'Genres', game.genres.join(', ')),
         if (game.developers.isNotEmpty)
-          _buildMetadataRow(textTheme, 'Ontwikkelaar', game.developers.join(', ')),
+          _buildMetadataRow(
+            textTheme,
+            'Ontwikkelaar',
+            game.developers.join(', '),
+          ),
         if (game.publishers.isNotEmpty)
           _buildMetadataRow(textTheme, 'Uitgever', game.publishers.join(', ')),
         if (game.ageRating != null)
-          _buildMetadataRow(textTheme, 'Leeftijdsclassificatie', game.ageRating!),
+          _buildMetadataRow(
+            textTheme,
+            'Leeftijdsclassificatie',
+            game.ageRating!,
+          ),
         if (game.tags.isNotEmpty)
-          _buildMetadataRow(textTheme, 'Tags', game.tags.take(8).join(', ') + (game.tags.length > 8 ? '...' : '')),
+          _buildMetadataRow(
+            textTheme,
+            'Tags',
+            game.tags.take(8).join(', ') + (game.tags.length > 8 ? '...' : ''),
+          ),
       ],
     );
   }
@@ -353,9 +386,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
           const SizedBox(height: 2),
           Text(
             value,
-            style: textTheme.bodySmall?.copyWith(
-              color: AppTheme.black,
-            ),
+            style: textTheme.bodySmall?.copyWith(color: AppTheme.black),
           ),
         ],
       ),

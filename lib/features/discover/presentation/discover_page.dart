@@ -573,56 +573,56 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   child: game.coverUrl == null
                       ? const Icon(
                           LucideIcons.gamepad2,
-                        size: 34,
-                        color: AppTheme.black,
-                      )
-                    : Image.network(
-                        game.coverUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            LucideIcons.gamepad2,
-                            size: 34,
-                            color: AppTheme.black,
-                          );
-                        },
+                          size: 34,
+                          color: AppTheme.black,
+                        )
+                      : Image.network(
+                          game.coverUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              LucideIcons.gamepad2,
+                              size: 34,
+                              color: AppTheme.black,
+                            );
+                          },
+                        ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(10, 28, 10, 8),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.blackTransparent0,
+                          AppTheme.blackTransparent40,
+                          AppTheme.blackTransparent80,
+                        ],
                       ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 28, 10, 8),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppTheme.blackTransparent0,
-                        AppTheme.blackTransparent40,
-                        AppTheme.blackTransparent80,
-                      ],
                     ),
-                  ),
-                  child: Text(
-                    game.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.white,
-                      fontWeight: FontWeight.w600,
+                    child: Text(
+                      game.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 }
 
 class _CameraSearchDialog extends StatefulWidget {

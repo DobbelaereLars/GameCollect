@@ -54,9 +54,7 @@ class RawgGamesApi {
     required String apiKey,
     required int id,
   }) async {
-    final uri = Uri.https('api.rawg.io', '/api/games/$id', {
-      'key': apiKey,
-    });
+    final uri = Uri.https('api.rawg.io', '/api/games/$id', {'key': apiKey});
 
     final response = await client.get(uri).timeout(const Duration(seconds: 12));
 
