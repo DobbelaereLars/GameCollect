@@ -142,9 +142,25 @@ class _DiscoverPageState extends State<DiscoverPage> {
       }
 
       setState(() {
-        final mergedGames = loadMore ? [..._games, ...page.games] : page.games;
-        _games = _sortGamesByRelevance(mergedGames, _activeQuery);
-        _nextPageUrl = page.nextPageUrl;
+        // Filter en sorteer alléén de gloednieuwe uit de API opgehaalde games
+        final processedNewGames = _sortGamesByRelevance(page.games, _activeQuery);
+        
+        if (loadMore) {
+          // Voeg de nieuwe games onderaan toe, zo springen de bestaande games op het scherm niet meer rond
+          _games = [..._games, ...processedNewGames];
+          
+          // Stop met het inladen van onzin als we zoeken: 
+          // Als er uit deze RAWG-pagina nul RELEVANTE games overbleven, kappen we de infinite scroll af.
+          if (_activeQuery.isNotEmpty && processedNewGames.isEmpty) {
+            _nextPageUrl = null;
+          } else {
+            _nextPageUrl = page.nextPageUrl;
+          }
+        } else {
+          // Dit is de eerste lading, dus we overschrijven de lijst gewoon.
+          _games = processedNewGames;
+          _nextPageUrl = page.nextPageUrl;
+        }
 
         // Succesvolle inlaadbeurt voltooid
         _isInitialLoading = false;
@@ -240,8 +256,17 @@ class _DiscoverPageState extends State<DiscoverPage> {
         .where((token) => token.isNotEmpty)
         .toList(growable: false);
 
-    final sorted = [...games];
-    sorted.sort((a, b) {
+    // Verwijder games die absoluut niks te maken hebben met de zoekterm
+    final validGames = games.where((g) {
+      final normalizedTitle = _normalizeSearchText(g.title);
+      if (normalizedTitle.contains(normalizedQuery)) return true;
+      for (final t in queryTokens) {
+        if (normalizedTitle.contains(t)) return true;
+      }
+      return false;
+    }).toList();
+
+    validGames.sort((a, b) {
       final scoreA = _scoreGameRelevance(a.title, normalizedQuery, queryTokens);
       final scoreB = _scoreGameRelevance(b.title, normalizedQuery, queryTokens);
 
@@ -252,7 +277,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
       return a.title.toLowerCase().compareTo(b.title.toLowerCase());
     });
 
-    return sorted;
+    return validGames;
   }
 
   String _normalizeSearchText(String value) {
