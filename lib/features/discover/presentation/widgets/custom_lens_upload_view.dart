@@ -232,6 +232,12 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
       isGameRelated = true;
     }
 
+    // Sluit gezelschapsspellen en bordspellen nadrukkelijk uit
+    const boardGameKeywords = ['gezelschapsspel', 'gezelschapsspellen', 'bordspel', 'bordspellen', 'board game', 'board games', 'boardgame'];
+    if (boardGameKeywords.some(kw => lowerBody.includes(kw))) {
+      isGameRelated = false;
+    }
+
     // Veranderd: filter metadata lables eruit
     const invalidTitleKeywords = ['zoekresultaten', 'visuele overeenkomsten', 'overzicht'];
     
