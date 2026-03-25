@@ -7,9 +7,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:gamecollect/features/discover/presentation/widgets/custom_lens_upload_view.dart';
+import 'dart:io';
 
 import '../../../core/theme/app_theme.dart';
-import '../data/game_cover_ocr_service.dart';
 import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
 import 'widgets/discover_search_bar.dart';
@@ -41,7 +42,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
   final http.Client _httpClient = http.Client();
   final ImagePicker _imagePicker = ImagePicker();
   final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
-  final GameCoverOcrService _ocrService = GameCoverOcrService();
 
   Timer? _debounce;
   bool _isInitialLoading = false;
@@ -63,7 +63,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _ocrService.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     _httpClient.close();
@@ -267,59 +266,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
     return score;
   }
 
-  Future<bool> _isLikelyGameCoverQuery({
-    required OcrCoverResult result,
-  }) async {
-    Future<int> bestScoreForQuery(String query) async {
-      final page = await _rawgGamesApi.fetchGames(
-        client: _httpClient,
-        apiKey: _rawgApiKey,
-        pageSize: 5,
-        activeQuery: query,
-      );
-
-      if (page.games.isEmpty) {
-        return -1;
-      }
-
-      final normalizedQuery = _normalizeSearchText(query);
-      final tokens = normalizedQuery
-          .split(' ')
-          .where((token) => token.isNotEmpty)
-          .toList(growable: false);
-
-      var best = -1;
-      for (final game in page.games) {
-        final score = _scoreGameRelevance(game.title, normalizedQuery, tokens);
-        if (score > best) {
-          best = score;
-        }
-      }
-
-      return best;
-    }
-
-    final queriesToCheck = [
-      result.query,
-      ...result.candidates.where((candidate) => candidate != result.query),
-    ];
-
-    var bestOverall = -1;
-    for (final query in queriesToCheck.take(3)) {
-      final score = await bestScoreForQuery(query);
-      if (score > bestOverall) {
-        bestOverall = score;
-      }
-    }
-
-    if (result.isLikelyGameCover) {
-      return bestOverall >= 3600;
-    }
-
-    // For uncertain OCR captures, be stricter.
-    return bestOverall >= 6500;
-  }
-
   void _showSnackBar(String message) {
     if (!mounted) {
       return;
@@ -366,29 +312,91 @@ class _DiscoverPageState extends State<DiscoverPage> {
       _isRecognizingCover = true;
     });
 
+    final photoFile = File(photo.path);
+
     try {
-      final result = await _ocrService.extractQueryFromImagePath(photo.path);
+      final CodeLensResult? result = await showDialog<CodeLensResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return Dialog(
+            backgroundColor: AppTheme.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Hidden rendering of webview
+                  Opacity(
+                    opacity: 0.01,
+                    child: SizedBox(
+                      height: 150,
+                      width: 150,
+                      child: CustomLensUploadView(
+                        imageFile: photoFile,
+                        onResult: (res) {
+                          if (context.mounted) {
+                            Navigator.of(context).pop(res);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  // App-native Loading UI
+                  Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(
+                          color: AppTheme.orange500,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Zoeken via afbeelding...',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Dit kan even duren...',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppTheme.gray700),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
 
       if (!mounted) {
         return;
       }
 
-      if (result == null || result.query.isEmpty) {
-        _showSnackBar('Geen gametitel herkend op de cover.');
+      if (result == null ||
+          result.title.isEmpty ||
+          result.title == "ERROR_NO_RESULTS") {
+        _showSnackBar('Er werden geen zoekresultaten gevonden.');
         return;
       }
 
-      final isLikelyCover = await _isLikelyGameCoverQuery(result: result);
-      if (!mounted) {
+      if (result.title == "ERROR_NOT_A_GAME") {
+        _showSnackBar(
+          'De foto lijkt niet op een game cover, probeer het opnieuw.',
+        );
         return;
       }
 
-      if (!isLikelyCover) {
-        _showSnackBar('Dit lijkt geen gamecover. Probeer een duidelijke coverfoto.');
-        return;
-      }
-
-      final query = result.query;
+      final query = result.title;
 
       _searchController.text = query;
       _searchController.selection = TextSelection.collapsed(
@@ -396,9 +404,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
       );
 
       _onSearchSubmitted(query);
-      _showSnackBar('Zoeken op: $query');
+      _showSnackBar('Gevonden: $query');
     } catch (_) {
-      _showSnackBar('Foto kon niet verwerkt worden. Probeer opnieuw.');
+      if (mounted) {
+        _showSnackBar('Foto kon niet verwerkt worden. Probeer opnieuw.');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -432,7 +442,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       onClearPressed: _clearSearch,
                       showCameraButton: _showCameraButton,
                       onCameraPressed: _openCamera,
-                      isCameraBusy: _isRecognizingCover,
+                      isCameraBusy: false,
                       isCameraDisabled: _isOpeningCamera || _isRecognizingCover,
                     ),
                     const SizedBox(height: 16),
