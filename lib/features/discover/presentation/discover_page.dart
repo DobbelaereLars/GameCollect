@@ -143,13 +143,16 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
       setState(() {
         // Filter en sorteer alléén de gloednieuwe uit de API opgehaalde games
-        final processedNewGames = _sortGamesByRelevance(page.games, _activeQuery);
-        
+        final processedNewGames = _sortGamesByRelevance(
+          page.games,
+          _activeQuery,
+        );
+
         if (loadMore) {
           // Voeg de nieuwe games onderaan toe, zo springen de bestaande games op het scherm niet meer rond
           _games = [..._games, ...processedNewGames];
-          
-          // Stop met het inladen van onzin als we zoeken: 
+
+          // Stop met het inladen van onzin als we zoeken:
           // Als er uit deze RAWG-pagina nul RELEVANTE games overbleven, kappen we de infinite scroll af.
           if (_activeQuery.isNotEmpty && processedNewGames.isEmpty) {
             _nextPageUrl = null;
