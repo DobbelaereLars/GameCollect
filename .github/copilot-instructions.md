@@ -100,3 +100,49 @@ Ontwikkel en test iOS als primaire target tijdens de implementatiefase.
 - Gebruik Lucide icons via lucide_icons_flutter als standaard iconbron.
 - Hanteer iOS als primaire testdoelstelling tijdens featureontwikkeling.
 - Bij nieuwe schermen: pas deze tokens toe in ThemeData, TextTheme en component styles.
+
+## Buttons (Standaardisatie)
+
+Binnen de app maken wij gebruik van de volgende knop stijlen ter bevordering van consistentie:
+
+- **Primary Button (bijv. "Opnieuw proberen"):** Een `OutlinedButton` waarbij zowel de tekst (foregroundColor) als de rand (side) gebruikmaken van de primaire accentkleur (`AppTheme.orange500`).
+
+```dart
+OutlinedButton(
+  onPressed: () {},
+  style: OutlinedButton.styleFrom(
+    foregroundColor: AppTheme.orange500,
+    side: const BorderSide(color: AppTheme.orange500),
+  ),
+  child: const Text('Primary Action'),
+)
+```
+
+- **Secondary Button (bijv. "Annuleren"):** Een standaard `TextButton` met grijze tekst (`AppTheme.gray700`), bedoeld voor minder prominente acties, zoals het annuleren of sluiten van dialogen.
+
+```dart
+TextButton(
+  onPressed: () {},
+  style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+  child: const Text('Secondary Action'),
+)
+```
+
+## Network & Error Handling (Standaardisatie)
+
+Hanteer bij alle API-calls en dataloads in de app dezelfde patronen voor trage of ontbrekende internetverbindingen:
+
+1. **Initial Load & Lege Staten (Errors)**
+   - **Geen internet** (bij o.a. `SocketException`, `TimeoutException`): Toon gecentreerd op het scherm een `LucideIcons.wifiOff` icoon (size: 48, color: orange500) met de tekst `"Controleer je internetverbinding"`.
+   - **Algemene / Server Fouten**: Toon gecentreerd een `LucideIcons.triangleAlert` icoon (size: 48, color: orange500) met de tekst `"Er is iets misgegaan."`.
+   - **Retry-mechanisme**: Plaats eronder altijd een `OutlinedButton` met de tekst `"Opnieuw proberen"` om de originele fetch opnieuw aan te roepen.
+
+2. **Trage Verbinding (Slow Connection Warning)**
+   - Gebruik een timer van 10 seconden die wordt gestart zodra het laden begint.
+   - Als de timer afloopt en het verzoek is nog bezig, voeg dan de tekst `"Dit duurt langer dan normaal..."` onder `CircularProgressIndicator` toe.
+   - Annuleer de weergave van deze tekst uiteraard als er een success/error respons binnen is.
+
+3. **Paginatie & Infinite Scroll Falen (Auto-retry)**
+   - Als er al resultaten op het scherm staan en een volgende 'loadMore' badge faalt wegens geen internet, gooi dan de reeds bestaande data **nooit** weg.
+   - Laat de status op laden staan (`isLoadingMore = true`), zodat de spinner onderaan de grid/lijst blijft draaien.
+   - Vang de netwerkfout af en schiet een automatische the-retry-loop in de achtergrond af (bijv. via `Future.delayed(const Duration(seconds: 3))` die de ophaal-functie voor de volgende pagina opnieuw aanroept totdat de verbinding weer hersteld is). Valt de UI dus niet onnodig lastig met pop-ups tijdens het bijladen.

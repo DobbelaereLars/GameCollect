@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,12 +16,14 @@ class CustomLensUploadView extends StatefulWidget {
   final File imageFile;
   final ValueChanged<CodeLensResult>? onResult;
   final ValueChanged<String>? onStatus;
+  final ValueChanged<String>? onError;
 
   const CustomLensUploadView({
     super.key,
     required this.imageFile,
     this.onResult,
     this.onStatus,
+    this.onError,
   });
 
   @override
@@ -69,6 +70,16 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
             } else if (url.contains('lens.google.com') ||
                 url.contains('google.com')) {
               _injectScraper();
+            }
+          },
+          onWebResourceError: (error) {
+            // Treat specific errors as network issues
+            if (error.errorType == WebResourceErrorType.hostLookup ||
+                error.errorType == WebResourceErrorType.timeout ||
+                error.errorType == WebResourceErrorType.unknown) {
+              widget.onError?.call('NETWORK_ERROR');
+            } else {
+              widget.onError?.call('ERROR');
             }
           },
         ),

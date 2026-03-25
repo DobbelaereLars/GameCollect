@@ -44,10 +44,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
   final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
 
   Timer? _debounce;
+  Timer? _slowConnectionTimer;
   bool _isInitialLoading = false;
   bool _isLoadingMore = false;
   bool _isOpeningCamera = false;
   bool _isRecognizingCover = false;
+  bool _isSlowConnection = false;
   String? _errorMessage;
   String _activeQuery = '';
   List<RawgGame> _games = const [];
@@ -63,6 +65,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _slowConnectionTimer?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     _httpClient.close();
@@ -85,6 +88,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
   }
 
   Future<void> _fetchGames({bool reset = false, bool loadMore = false}) async {
+    _slowConnectionTimer?.cancel();
+
     if (_rawgApiKey.isEmpty) {
       setState(() {
         _errorMessage =
@@ -101,6 +106,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
 
     setState(() {
+      _isSlowConnection = false;
       if (reset) {
         _isInitialLoading = true;
         _errorMessage = null;
@@ -111,6 +117,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
       } else {
         _isInitialLoading = true;
         _errorMessage = null;
+      }
+    });
+
+    _slowConnectionTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && (_isInitialLoading || _isLoadingMore)) {
+        setState(() {
+          _isSlowConnection = true;
+        });
       }
     });
 
@@ -131,23 +145,44 @@ class _DiscoverPageState extends State<DiscoverPage> {
         final mergedGames = loadMore ? [..._games, ...page.games] : page.games;
         _games = _sortGamesByRelevance(mergedGames, _activeQuery);
         _nextPageUrl = page.nextPageUrl;
+
+        // Succesvolle inlaadbeurt voltooid
+        _isInitialLoading = false;
+        _isLoadingMore = false;
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
 
+      final isNetworkError =
+          error is SocketException ||
+          error is TimeoutException ||
+          (error.toString().contains('SocketException') ||
+              error.toString().contains('ClientException'));
+
       setState(() {
-        _errorMessage = 'Kon games niet ophalen. Probeer opnieuw.';
         if (!loadMore) {
+          if (isNetworkError) {
+            _errorMessage = 'Controleer je internetverbinding';
+          } else {
+            _errorMessage = 'Er is iets misgegaan.';
+          }
           _games = const [];
+          _isInitialLoading = false;
+        } else {
+          // Als we al games hadden (loadMore = true) en connectie valt weg,
+          // laten we `_isLoadingMore` op `true` staan zodat de spinner onderaan blijf staan
+          // en hij infinite laadt, conform de vereisten.
         }
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isInitialLoading = false;
-          _isLoadingMore = false;
+
+      if (loadMore) {
+        // Probeer automatisch periodiek opnieuw totdat de verbinding weer hersteld is
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted && _isLoadingMore) {
+            _fetchGames(loadMore: true);
+          }
         });
       }
     }
@@ -319,62 +354,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
         context: context,
         barrierDismissible: false,
         builder: (context) {
-          return Dialog(
-            backgroundColor: AppTheme.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Hidden rendering of webview
-                  Opacity(
-                    opacity: 0.01,
-                    child: SizedBox(
-                      height: 150,
-                      width: 150,
-                      child: CustomLensUploadView(
-                        imageFile: photoFile,
-                        onResult: (res) {
-                          if (context.mounted) {
-                            Navigator.of(context).pop(res);
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  // App-native Loading UI
-                  Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(
-                          color: AppTheme.orange500,
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Zoeken via afbeelding...',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Dit kan even duren...',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: AppTheme.gray700),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return _CameraSearchDialog(photoFile: photoFile);
         },
       );
 
@@ -465,24 +445,53 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   Widget _buildContent(TextTheme textTheme) {
     if (_isInitialLoading && _games.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            if (_isSlowConnection) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Dit duurt langer dan normaal...',
+                style: textTheme.bodyMedium?.copyWith(color: AppTheme.black),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
+      );
     }
 
     if (_errorMessage != null) {
+      final isNetworkError =
+          _errorMessage == 'Controleer je internetverbinding';
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(
+                isNetworkError
+                    ? LucideIcons.wifiOff
+                    : LucideIcons.triangleAlert,
+                size: 48,
+                color: AppTheme.orange500,
+              ),
+              const SizedBox(height: 16),
               Text(
                 _errorMessage!,
-                style: textTheme.bodyLarge,
+                style: textTheme.bodyLarge?.copyWith(color: AppTheme.black),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: () => _fetchGames(reset: true),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                ),
                 child: const Text('Opnieuw proberen'),
               ),
             ],
@@ -570,6 +579,199 @@ class _DiscoverPageState extends State<DiscoverPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _CameraSearchDialog extends StatefulWidget {
+  final File photoFile;
+
+  const _CameraSearchDialog({required this.photoFile});
+
+  @override
+  State<_CameraSearchDialog> createState() => _CameraSearchDialogState();
+}
+
+class _CameraSearchDialogState extends State<_CameraSearchDialog> {
+  bool _isLoading = true;
+  bool _hasError = false;
+  bool _isNetworkError = false;
+
+  bool _isSlow = false;
+  Timer? _slowTimer;
+
+  int _retryKey = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startSearch();
+  }
+
+  @override
+  void dispose() {
+    _slowTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startSearch() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _isNetworkError = false;
+      _isSlow = false;
+      _retryKey++;
+    });
+
+    _slowTimer?.cancel();
+    _slowTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && _isLoading && !_hasError) {
+        setState(() {
+          _isSlow = true;
+        });
+      }
+    });
+
+    // Explicit internet check to fail fast for SocketException
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      if (result.isEmpty || result[0].rawAddress.isEmpty) {
+        _handleError('NETWORK_ERROR');
+      }
+    } on SocketException catch (_) {
+      _handleError('NETWORK_ERROR');
+    } catch (_) {
+      // Ignored, let webview handle other errors
+    }
+  }
+
+  void _handleError(String code) {
+    if (!mounted) return;
+    _slowTimer?.cancel();
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+      _isNetworkError = code == 'NETWORK_ERROR';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _hasError ? _buildErrorView() : _buildLoadingView(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingView() {
+    return Stack(
+      key: const ValueKey('loading'),
+      alignment: Alignment.center,
+      children: [
+        // Hidden rendering of webview off-screen to prevent covering Flutter UI
+        Positioned(
+          left: -1000,
+          top: -1000,
+          child: SizedBox(
+            height: 10,
+            width: 10,
+            child: CustomLensUploadView(
+              key: ValueKey(_retryKey),
+              imageFile: widget.photoFile,
+              onResult: (res) {
+                if (mounted) {
+                  Navigator.of(context).pop(res);
+                }
+              },
+              onError: _handleError,
+            ),
+          ),
+        ),
+        // App-native Loading UI
+        Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.orange500),
+              const SizedBox(height: 24),
+              Text(
+                'Zoeken via afbeelding...',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.black,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (_isSlow) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Dit duurt langer dan normaal...',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.gray700),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Padding(
+      key: const ValueKey('error'),
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _isNetworkError ? LucideIcons.wifiOff : LucideIcons.triangleAlert,
+            size: 48,
+            color: AppTheme.orange500,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _isNetworkError
+                ? 'Er is een fout opgetreden tijdens het zoeken. Controleer je internetverbinding en probeer opnieuw.'
+                : 'Er is een fout opgetreden tijdens het zoeken.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.black,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton(
+            onPressed: _startSearch,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.orange500,
+              side: const BorderSide(color: AppTheme.orange500),
+            ),
+            child: const Text('Opnieuw proberen'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+            child: const Text('Annuleren'),
+          ),
+        ],
+      ),
     );
   }
 }
