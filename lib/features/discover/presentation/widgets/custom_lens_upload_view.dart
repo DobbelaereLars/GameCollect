@@ -88,7 +88,11 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (url) {
-            if (url.startsWith('file://')) {
+            if (!_didUpload &&
+                (url == 'about:blank' ||
+                    url.startsWith('data:') ||
+                    url.startsWith('file://') ||
+                    url == 'https://lens.google.com/')) {
               _injectAndUpload();
             } else if (url.contains('lens.google.com') ||
                 url.contains('google.com')) {
@@ -167,12 +171,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
 </body>
 </html>
 ''';
-    final dir = await getTemporaryDirectory();
-    final file = File(
-      '${dir.path}/custom_lens_upload_${DateTime.now().millisecondsSinceEpoch}.html',
-    );
-    await file.writeAsString(html);
-    await _controller.loadRequest(Uri.file(file.path));
+    await _controller.loadHtmlString(html, baseUrl: 'https://lens.google.com/');
   }
 
   Future<void> _injectAndUpload() async {
