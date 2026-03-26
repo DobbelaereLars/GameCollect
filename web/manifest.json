@@ -1,6 +1,6 @@
 {
-    "name": "gamecollect",
-    "short_name": "gamecollect",
+    "name": "GameCollect",
+    "short_name": "GameCollect",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
