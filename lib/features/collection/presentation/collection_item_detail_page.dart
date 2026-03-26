@@ -29,6 +29,38 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   bool _isSavingNotes = false;
   bool _showDisabledRequirements = false;
 
+  InputDecoration _orangeInputDecoration({
+    String? hintText,
+    String? labelText,
+    bool isDense = true,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      labelText: labelText,
+      isDense: isDense,
+      hintStyle: const TextStyle(
+        fontFamily: 'Manrope',
+        color: AppTheme.gray500,
+      ),
+      labelStyle: const TextStyle(
+        fontFamily: 'Manrope',
+        color: AppTheme.orange700,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange600, width: 1.5),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +122,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     final customTags = List<String>.from(item.customTags);
     final selectedCustomTags = Set<String>.from(item.selectedCustomTags);
     final customTagController = TextEditingController();
+    final sheetScrollController = ScrollController();
 
     bool canSave() {
       return selectedSuggestedTags.isNotEmpty || selectedCustomTags.isNotEmpty;
@@ -112,10 +145,23 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         return;
       }
 
+      final previousOffset = sheetScrollController.hasClients
+          ? sheetScrollController.offset
+          : 0.0;
+
       setSheetState(() {
         customTags.add(value);
         selectedCustomTags.add(value);
         customTagController.clear();
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!sheetScrollController.hasClients) {
+          return;
+        }
+        final maxOffset = sheetScrollController.position.maxScrollExtent;
+        final targetOffset = previousOffset.clamp(0.0, maxOffset);
+        sheetScrollController.jumpTo(targetOffset);
       });
     }
 
@@ -144,6 +190,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 MediaQuery.of(sheetContext).viewInsets.bottom + 40,
               ),
               child: SingleChildScrollView(
+                controller: sheetScrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -275,22 +324,31 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                           Expanded(
                             child: TextField(
                               controller: customTagController,
-                              decoration: const InputDecoration(
+                              cursorColor: AppTheme.orange600,
+                              style: const TextStyle(
+                                fontFamily: 'Manrope',
+                                color: AppTheme.black,
+                              ),
+                              decoration: _orangeInputDecoration(
                                 hintText: 'Typ je eigen tag',
-                                border: OutlineInputBorder(),
-                                isDense: true,
                               ),
                               onSubmitted: (_) => addCustomTag(setSheetState),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          OutlinedButton(
-                            onPressed: () => addCustomTag(setSheetState),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.orange500,
-                              side: const BorderSide(color: AppTheme.orange500),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: () => addCustomTag(setSheetState),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.orange500,
+                                foregroundColor: AppTheme.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Toevoegen'),
                             ),
-                            child: const Text('Toevoegen'),
                           ),
                         ],
                       ),
@@ -844,18 +902,24 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       children: [
         TextField(
           controller: _notesController,
+          cursorColor: AppTheme.orange600,
+          style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
           maxLines: 4,
-          decoration: const InputDecoration(
+          decoration: _orangeInputDecoration(
             hintText: 'Voeg notities toe over je playthrough, builds, tips...',
-            border: OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 10),
-        OutlinedButton(
+        ElevatedButton(
           onPressed: _isSavingNotes ? null : _saveNotes,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppTheme.orange500,
-            side: const BorderSide(color: AppTheme.orange500),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.orange500,
+            foregroundColor: AppTheme.white,
+            disabledBackgroundColor: AppTheme.orange100,
+            disabledForegroundColor: AppTheme.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           child: Text(_isSavingNotes ? 'Opslaan...' : 'Notities opslaan'),
         ),
@@ -893,11 +957,12 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               child: TextField(
                 controller: _hoursController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Uren',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                cursorColor: AppTheme.orange600,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  color: AppTheme.black,
                 ),
+                decoration: _orangeInputDecoration(labelText: 'Uren'),
               ),
             ),
             const SizedBox(width: 8),
@@ -905,21 +970,28 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               child: TextField(
                 controller: _minutesController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Minuten',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                cursorColor: AppTheme.orange600,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  color: AppTheme.black,
                 ),
+                decoration: _orangeInputDecoration(labelText: 'Minuten'),
               ),
             ),
             const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: _addPlaytime,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.orange500,
-                side: const BorderSide(color: AppTheme.orange500),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _addPlaytime,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.orange500,
+                  foregroundColor: AppTheme.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Opslaan'),
               ),
-              child: const Text('Opslaan'),
             ),
           ],
         ),
@@ -1023,22 +1095,31 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             Expanded(
               child: TextField(
                 controller: _requirementTitleController,
-                decoration: const InputDecoration(
+                cursorColor: AppTheme.orange600,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  color: AppTheme.black,
+                ),
+                decoration: _orangeInputDecoration(
                   hintText: 'Voeg eigen requirement/achievement toe',
-                  border: OutlineInputBorder(),
-                  isDense: true,
                 ),
                 onSubmitted: (_) => _addCustomRequirement(),
               ),
             ),
             const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: _addCustomRequirement,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.orange500,
-                side: const BorderSide(color: AppTheme.orange500),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _addCustomRequirement,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.orange500,
+                  foregroundColor: AppTheme.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Toevoegen'),
               ),
-              child: const Text('Toevoegen'),
             ),
           ],
         ),
