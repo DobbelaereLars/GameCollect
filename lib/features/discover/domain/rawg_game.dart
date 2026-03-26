@@ -73,18 +73,19 @@ class RawgGameDetails {
     final esrb = json['esrb_rating'] as Map<String, dynamic>?;
     String? ageRatingName = esrb?['name'] as String?;
     if (ageRatingName != null) {
-      if (ageRatingName == 'Everyone')
+      if (ageRatingName == 'Everyone') {
         ageRatingName = 'Alle leeftijden (Everyone)';
-      else if (ageRatingName == 'Everyone 10+')
+      } else if (ageRatingName == 'Everyone 10+') {
         ageRatingName = '10+ (Everyone 10+)';
-      else if (ageRatingName == 'Teen')
+      } else if (ageRatingName == 'Teen') {
         ageRatingName = '13+ (Teen)';
-      else if (ageRatingName == 'Mature')
+      } else if (ageRatingName == 'Mature') {
         ageRatingName = '17+ (Mature)';
-      else if (ageRatingName == 'Adults Only')
+      } else if (ageRatingName == 'Adults Only') {
         ageRatingName = '18+ (Adults Only)';
-      else if (ageRatingName == 'Rating Pending')
+      } else if (ageRatingName == 'Rating Pending') {
         ageRatingName = 'Beoordeling in afwachting';
+      }
     }
 
     return RawgGameDetails(
@@ -102,6 +103,29 @@ class RawgGameDetails {
       publishers: extractNames('publishers'),
       tags: extractNames('tags'),
       ageRating: ageRatingName,
+    );
+  }
+}
+
+class RawgAchievement {
+  const RawgAchievement({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.percent,
+  });
+
+  final int id;
+  final String name;
+  final String description;
+  final double? percent;
+
+  factory RawgAchievement.fromJson(Map<String, dynamic> json) {
+    return RawgAchievement(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? 'Onbekende achievement',
+      description: json['description'] as String? ?? '',
+      percent: (json['percent'] as num?)?.toDouble(),
     );
   }
 }

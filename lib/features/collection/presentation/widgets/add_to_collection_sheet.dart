@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../domain/collection_item.dart';
+import '../../../discover/data/rawg_games_api.dart';
 import '../../../discover/domain/rawg_game.dart';
 
 class AddToCollectionSheet extends StatefulWidget {
@@ -33,6 +36,7 @@ class AddToCollectionSheet extends StatefulWidget {
 }
 
 class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
+  final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
   int _currentStep = 0;
   final Set<String> _selectedPlatforms = {};
   List<String> _platformsToFormat = [];
@@ -57,41 +61,62 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       return '$p ($format)';
     }).toList();
 
-    final allUsedFormats = _selectedPlatforms
-        .map((p) => _platformFormats[p] ?? 'Fysiek')
-        .toSet();
-    bool hasPhysical =
-        allUsedFormats.contains('Fysiek') ||
-        allUsedFormats.contains('Fysiek & Digitaal');
-    bool hasDigital =
-        allUsedFormats.contains('Digitaal') ||
-        allUsedFormats.contains('Fysiek & Digitaal');
-
-    String finalFormat;
-    if (hasPhysical && hasDigital) {
-      finalFormat = 'Fysiek & Digitaal';
-    } else if (hasPhysical) {
-      finalFormat = 'Fysiek';
-    } else if (hasDigital) {
-      finalFormat = 'Digitaal';
-    } else {
-      finalFormat = 'Fysiek & Digitaal';
+    List<RawgAchievement> achievements = const [];
+    final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+    if (rawgApiKey.isNotEmpty) {
+      final client = http.Client();
+      try {
+        achievements = await _rawgGamesApi.fetchGameAchievements(
+          client: client,
+          apiKey: rawgApiKey,
+          id: widget.game.id,
+        );
+      } catch (_) {
+        achievements = const [];
+      } finally {
+        client.close();
+      }
     }
 
-    final item = CollectionItem(
-      apiId: widget.game.id,
-      title: widget.game.title,
-      coverUrl: widget.game.coverUrl,
-      publisher: widget.game.publishers.isNotEmpty
-          ? widget.game.publishers.first
-          : null,
-      format: finalFormat,
-      selectedPlatforms: customizedPlatforms,
-      tags: widget.game.tags.take(8).toList(),
-      addedAt: DateTime.now(),
-    );
+    final requirements = achievements
+        .map(
+          (achievement) => GameRequirement(
+            id: 'rawg_${achievement.id}',
+            title: achievement.name,
+            description: achievement.description,
+            isCompleted: false,
+            isCustom: false,
+            isEnabled: true,
+          ),
+        )
+        .toList(growable: false);
 
-    await DatabaseHelper.instance.insertCollectionItem(item);
+    for (final platformWithFormat in customizedPlatforms) {
+      final formatMatch = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+      final format = formatMatch?.group(1) ?? 'Fysiek & Digitaal';
+
+      final item = CollectionItem(
+        apiId: widget.game.id,
+        title: widget.game.title,
+        coverUrl: widget.game.coverUrl,
+        publisher: widget.game.publishers.isNotEmpty
+            ? widget.game.publishers.first
+            : null,
+        format: format,
+        selectedPlatforms: [platformWithFormat],
+        suggestedTags: widget.game.tags.take(12).toList(),
+        selectedSuggestedTags: const [],
+        customTags: const [],
+        selectedCustomTags: const [],
+        notes: '',
+        playtimeEntries: const [],
+        requirements: requirements,
+        isManuallyCompleted: false,
+        addedAt: DateTime.now(),
+      );
+
+      await DatabaseHelper.instance.insertCollectionItem(item);
+    }
 
     if (mounted) {
       Navigator.of(context).pop();

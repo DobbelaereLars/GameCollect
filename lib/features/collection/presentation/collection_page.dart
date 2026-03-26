@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_helper.dart';
 import '../domain/collection_item.dart';
+import 'collection_item_detail_page.dart';
 import '../../discover/presentation/widgets/discover_search_bar.dart';
 
 class CollectionPage extends StatefulWidget {
@@ -556,123 +557,178 @@ class _CollectionPageState extends State<CollectionPage> {
                   borderRadius: BorderRadius.circular(16),
                   side: const BorderSide(color: AppTheme.gray100),
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Cover Image
-                    ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(16),
-                      ),
-                      child: SizedBox(
-                        width: 100,
-                        height: 140, // consistent height
-                        child: item.coverUrl != null
-                            ? Image.network(
-                                item.coverUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, _, __) =>
-                                    _buildPlaceholder(),
-                              )
-                            : _buildPlaceholder(),
-                      ),
-                    ),
-                    // Meta Data
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.black,
-                                    height: 1.2,
-                                  ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: item.id == null
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  CollectionItemDetailPage(itemId: item.id!),
                             ),
-                            const SizedBox(height: 8),
-                            // Format badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.orange50,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    formatIcon,
-                                    size: 12,
-                                    color: AppTheme.orange500,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    specificFormat,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: AppTheme.orange700,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            if (item.publisher != null &&
-                                item.publisher!.isNotEmpty)
-                              Row(
-                                children: [
-                                  const Icon(
-                                    LucideIcons.building,
-                                    size: 14,
-                                    color: AppTheme.gray500,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      item.publisher!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: AppTheme.gray500,
-                                            fontSize: 12,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
+                          );
+                        },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Cover Image
+                      ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(16),
+                        ),
+                        child: SizedBox(
+                          width: 100,
+                          height: 140, // consistent height
+                          child: item.coverUrl != null
+                              ? Image.network(
+                                  item.coverUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      _buildPlaceholder(),
+                                )
+                              : _buildPlaceholder(),
                         ),
                       ),
-                    ),
-                    // Action menu
-                    IconButton(
-                      icon: const Icon(
-                        LucideIcons.ellipsisVertical,
-                        size: 20,
-                        color: AppTheme.gray500,
+                      // Meta Data
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.black,
+                                      height: 1.2,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              // Format badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.orange50,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      formatIcon,
+                                      size: 12,
+                                      color: AppTheme.orange500,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      specificFormat,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: AppTheme.orange700,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (item.publisher != null &&
+                                  item.publisher!.isNotEmpty)
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      LucideIcons.building,
+                                      size: 14,
+                                      color: AppTheme.gray500,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        item.publisher!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppTheme.gray500,
+                                              fontSize: 12,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: item.progressRatio,
+                                minHeight: 6,
+                                borderRadius: BorderRadius.circular(999),
+                                backgroundColor: AppTheme.orange100,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  AppTheme.orange500,
+                                ),
+                              ),
+                              if (item.activeTags.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: item.activeTags.take(3).map((tag) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: AppTheme.orange100,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        tag,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppTheme.black,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
-                      onPressed: () => _showItemOptions(
-                        item,
-                        specificPlatform: platform,
-                        specificPlatformWithFormat: platformString,
+                      // Action menu
+                      IconButton(
+                        icon: const Icon(
+                          LucideIcons.ellipsisVertical,
+                          size: 20,
+                          color: AppTheme.gray500,
+                        ),
+                        onPressed: () => _showItemOptions(
+                          item,
+                          specificPlatform: platform,
+                          specificPlatformWithFormat: platformString,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }),
@@ -691,11 +747,20 @@ class _CollectionPageState extends State<CollectionPage> {
     );
   }
 
-  void _showItemOptions(
+  Future<void> _showItemOptions(
     CollectionItem item, {
     required String specificPlatform,
     required String specificPlatformWithFormat,
-  }) {
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final sameGameCount = await DatabaseHelper.instance
+        .countCollectionItemsByApiId(item.apiId);
+    if (!mounted) {
+      return;
+    }
+
+    final hasMultipleGameEntries = sameGameCount > 1;
+
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -704,8 +769,6 @@ class _CollectionPageState extends State<CollectionPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        final hasMultiplePlatforms = item.selectedPlatforms.length > 1;
-
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 24.0),
@@ -714,7 +777,7 @@ class _CollectionPageState extends State<CollectionPage> {
               children: [
                 ListTile(
                   leading: Icon(
-                    hasMultiplePlatforms
+                    hasMultipleGameEntries
                         ? LucideIcons.minus
                         : LucideIcons.trash2,
                     color: Colors.red,
@@ -736,17 +799,8 @@ class _CollectionPageState extends State<CollectionPage> {
                         );
                       } else {
                         // Create updated item with the platform removed
-                        final updatedItem = CollectionItem(
-                          id: item.id,
-                          apiId: item.apiId,
-                          title: item.title,
-                          coverUrl: item.coverUrl,
-                          publisher: item.publisher,
-                          format: item
-                              .format, // Might need logic to re-evaluate overall format, but fine for now
+                        final updatedItem = item.copyWith(
                           selectedPlatforms: updatedPlatforms,
-                          tags: item.tags,
-                          addedAt: item.addedAt,
                         );
                         await DatabaseHelper.instance.updateCollectionItem(
                           updatedItem,
@@ -755,7 +809,7 @@ class _CollectionPageState extends State<CollectionPage> {
 
                       _loadCollection();
                       if (mounted) {
-                        ScaffoldMessenger.of(context)
+                        messenger
                           ..removeCurrentSnackBar()
                           ..showSnackBar(
                             SnackBar(
@@ -768,7 +822,7 @@ class _CollectionPageState extends State<CollectionPage> {
                     }
                   },
                 ),
-                if (hasMultiplePlatforms)
+                if (hasMultipleGameEntries)
                   ListTile(
                     leading: const Icon(LucideIcons.trash2, color: Colors.red),
                     title: Text(
@@ -777,22 +831,19 @@ class _CollectionPageState extends State<CollectionPage> {
                     ),
                     onTap: () async {
                       Navigator.of(context).pop();
-                      if (item.id != null) {
-                        await DatabaseHelper.instance.deleteCollectionItem(
-                          item.id!,
-                        );
-                        _loadCollection();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context)
-                            ..removeCurrentSnackBar()
-                            ..showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Game volledig verwijderd uit collectie.',
-                                ),
+                      await DatabaseHelper.instance
+                          .deleteCollectionItemsByApiId(item.apiId);
+                      _loadCollection();
+                      if (mounted) {
+                        messenger
+                          ..removeCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Game volledig verwijderd uit collectie.',
                               ),
-                            );
-                        }
+                            ),
+                          );
                       }
                     },
                   ),

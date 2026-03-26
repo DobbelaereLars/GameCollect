@@ -22,7 +22,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -39,6 +39,14 @@ CREATE TABLE collection (
   format TEXT NOT NULL,
   selectedPlatforms TEXT NOT NULL,
   tags TEXT NOT NULL,
+  suggestedTags TEXT NOT NULL DEFAULT '[]',
+  selectedSuggestedTags TEXT NOT NULL DEFAULT '[]',
+  customTags TEXT NOT NULL DEFAULT '[]',
+  selectedCustomTags TEXT NOT NULL DEFAULT '[]',
+  notes TEXT NOT NULL DEFAULT '',
+  playtimeEntries TEXT NOT NULL DEFAULT '[]',
+  requirements TEXT NOT NULL DEFAULT '[]',
+  isManuallyCompleted INTEGER NOT NULL DEFAULT 0,
   addedAt TEXT NOT NULL
 )
 ''');
@@ -47,6 +55,36 @@ CREATE TABLE collection (
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE collection ADD COLUMN publisher TEXT');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN suggestedTags TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN selectedSuggestedTags TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN customTags TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+      );
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN playtimeEntries TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN requirements TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute(
+        'ALTER TABLE collection ADD COLUMN isManuallyCompleted INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    if (oldVersion < 4) {
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN selectedCustomTags TEXT NOT NULL DEFAULT '[]'",
+      );
     }
   }
 
@@ -77,10 +115,40 @@ CREATE TABLE collection (
     return result.map((json) => CollectionItem.fromMap(json)).toList();
   }
 
+  Future<CollectionItem?> getCollectionItemById(int id) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'collection',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (result.isEmpty) {
+      return null;
+    }
+    return CollectionItem.fromMap(result.first);
+  }
+
   Future<void> deleteCollectionItem(int id) async {
     final db = await instance.database;
     await db.delete("collection", where: "id = ?", whereArgs: [id]);
     notifyListeners();
+  }
+
+  Future<void> deleteCollectionItemsByApiId(int apiId) async {
+    final db = await instance.database;
+    await db.delete('collection', where: 'apiId = ?', whereArgs: [apiId]);
+    notifyListeners();
+  }
+
+  Future<int> countCollectionItemsByApiId(int apiId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM collection WHERE apiId = ?',
+      [apiId],
+    );
+    final total = result.first['total'] as int?;
+    return total ?? 0;
   }
 
   Future<bool> isGameInCollection(int apiId) async {
