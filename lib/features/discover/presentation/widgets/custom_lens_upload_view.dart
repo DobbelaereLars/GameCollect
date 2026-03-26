@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 
 class CodeLensResult {
   final String title;
