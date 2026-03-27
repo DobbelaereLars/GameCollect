@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -8,9 +9,14 @@ import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
-  const CollectionItemDetailPage({super.key, required this.itemId});
+  const CollectionItemDetailPage({
+    super.key,
+    required this.itemId,
+    this.openTagsOnStart = false,
+  });
 
   final int itemId;
+  final bool openTagsOnStart;
 
   @override
   State<CollectionItemDetailPage> createState() =>
@@ -18,6 +24,9 @@ class CollectionItemDetailPage extends StatefulWidget {
 }
 
 class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
+  static const int _maxActiveTags = 10;
+  static const int _maxCustomTagLength = 15;
+
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _hoursController = TextEditingController();
   final TextEditingController _minutesController = TextEditingController();
@@ -28,6 +37,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   bool _isLoading = true;
   bool _isSavingNotes = false;
   bool _showDisabledRequirements = false;
+  bool _hasOpenedTagsOnStart = false;
 
   InputDecoration _orangeInputDecoration({
     String? hintText,
@@ -99,6 +109,16 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       _item = item;
       _isLoading = false;
     });
+
+    if (widget.openTagsOnStart && !_hasOpenedTagsOnStart) {
+      _hasOpenedTagsOnStart = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _showTagsOnboardingSheet();
+      });
+    }
   }
 
   Future<void> _persistItem(CollectionItem updated) async {
@@ -128,6 +148,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       return selectedSuggestedTags.isNotEmpty || selectedCustomTags.isNotEmpty;
     }
 
+    int activeTagCount() {
+      return selectedSuggestedTags.length + selectedCustomTags.length;
+    }
+
+    bool canAddActiveTag() {
+      return activeTagCount() < _maxActiveTags;
+    }
+
     void addCustomTag(void Function(void Function()) setSheetState) {
       final value = customTagController.text.trim();
       if (value.isEmpty) {
@@ -142,6 +170,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       );
       if (existsInSuggested || existsInCustom) {
         customTagController.clear();
+        return;
+      }
+
+      if (!canAddActiveTag()) {
         return;
       }
 
@@ -181,6 +213,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             final sectionMeta = step == 0
                 ? 'Kies voorgestelde tags die je actief wil gebruiken. Dit is optioneel.'
                 : 'Voeg je eigen tags toe door te typen en op Toevoegen te drukken.';
+            final selectedCount = activeTagCount();
+            final isTagLimitReached = selectedCount >= _maxActiveTags;
 
             return Padding(
               padding: EdgeInsets.fromLTRB(
@@ -263,6 +297,22 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                             ?.copyWith(color: AppTheme.gray500),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: EdgeInsets.only(left: step == 1 ? 57 : 0),
+                      child: Text(
+                        'Geselecteerd: $selectedCount/$_maxActiveTags',
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                          color: isTagLimitReached
+                              ? AppTheme.orange700
+                              : AppTheme.gray700,
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     if (step == 0) ...[
                       if (!hasSuggestedTags)
@@ -291,6 +341,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                               onSelected: (selected) {
                                 setSheetState(() {
                                   if (selected) {
+                                    if (!canAddActiveTag()) {
+                                      return;
+                                    }
                                     selectedSuggestedTags.add(tag);
                                   } else {
                                     selectedSuggestedTags.remove(tag);
@@ -325,12 +378,17 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                             child: TextField(
                               controller: customTagController,
                               cursorColor: AppTheme.orange600,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(
+                                  _maxCustomTagLength,
+                                ),
+                              ],
                               style: const TextStyle(
                                 fontFamily: 'Manrope',
                                 color: AppTheme.black,
                               ),
                               decoration: _orangeInputDecoration(
-                                hintText: 'Typ je eigen tag',
+                                hintText: 'Typ je eigen tag (max 15)',
                               ),
                               onSubmitted: (_) => addCustomTag(setSheetState),
                             ),
@@ -339,10 +397,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                           SizedBox(
                             height: 48,
                             child: ElevatedButton(
-                              onPressed: () => addCustomTag(setSheetState),
+                              onPressed: isTagLimitReached
+                                  ? null
+                                  : () => addCustomTag(setSheetState),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.orange500,
                                 foregroundColor: AppTheme.white,
+                                disabledBackgroundColor: AppTheme.orange100,
+                                disabledForegroundColor: AppTheme.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -373,6 +435,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                   if (isSelected) {
                                     selectedCustomTags.remove(tag);
                                   } else {
+                                    if (!canAddActiveTag()) {
+                                      return;
+                                    }
                                     selectedCustomTags.add(tag);
                                   }
                                 });
@@ -647,8 +712,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(item),
-              const SizedBox(height: 16),
-              _buildSection(title: 'Tags', child: _buildTagsSection(item)),
               const SizedBox(height: 12),
               _buildSection(title: 'Notities', child: _buildNotesSection()),
               const SizedBox(height: 12),
@@ -693,96 +756,227 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   }
 
   Widget _buildHeader(CollectionItem item) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppTheme.gray100),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.horizontal(
-              left: Radius.circular(16),
-            ),
-            child: SizedBox(
-              width: 110,
-              height: 150,
-              child: item.coverUrl != null
-                  ? Image.network(
-                      item.coverUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          _buildCoverPlaceholder(),
-                    )
-                  : _buildCoverPlaceholder(),
+    final tagActionLabel = item.activeTags.isEmpty
+        ? 'Tags toevoegen'
+        : 'Tags bewerken';
+    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
+        ? item.selectedPlatforms.first
+        : '';
+    final platformName = _extractPlatformName(primaryPlatformWithFormat);
+    final formatName = _extractFormatName(
+      primaryPlatformWithFormat,
+      fallback: item.format,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                item.coverUrl != null
+                    ? Image.network(
+                        item.coverUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildCoverPlaceholder(),
+                      )
+                    : _buildCoverPlaceholder(),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildCoverBadge(
+                        icon: LucideIcons.gamepad2,
+                        text: platformName,
+                      ),
+                      const SizedBox(height: 6),
+                      _buildCoverBadge(
+                        icon: _formatIconFor(formatName),
+                        text: formatName,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                      color: AppTheme.black,
-                    ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          item.title,
+          style: const TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+            color: AppTheme.black,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ...item.activeTags.map((tag) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.orange100),
+                ),
+                child: Text(
+                  tag,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    color: AppTheme.black,
                   ),
-                  const SizedBox(height: 8),
-                  if (item.publisher != null && item.publisher!.isNotEmpty)
-                    Row(
-                      children: [
-                        const Icon(
-                          LucideIcons.building,
-                          size: 14,
-                          color: AppTheme.gray500,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            item.publisher!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Manrope',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              height: 1.4,
-                              color: AppTheme.gray500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.selectedPlatforms.join(', '),
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      height: 1.4,
-                      color: AppTheme.gray700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  LinearProgressIndicator(
-                    value: item.progressRatio,
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(999),
-                    backgroundColor: AppTheme.orange100,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      AppTheme.orange500,
-                    ),
-                  ),
-                ],
+                ),
+              );
+            }),
+            TextButton(
+              onPressed: _showTagsOnboardingSheet,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.orange500,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
+              child: Text(tagActionLabel),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildHeaderMetaRow(
+          icon: LucideIcons.clock3,
+          text: 'Speelduur: ${_formatMinutes(item.totalPlaytimeMinutes)}',
+        ),
+        const SizedBox(height: 6),
+        if (item.publisher != null && item.publisher!.isNotEmpty)
+          _buildHeaderMetaRow(
+            icon: LucideIcons.building,
+            text: item.publisher!,
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: LinearProgressIndicator(
+                value: item.progressRatio,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(999),
+                backgroundColor: AppTheme.orange100,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppTheme.orange500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '${(item.progressRatio * 100).round()}%',
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: AppTheme.black,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderMetaRow({
+    required IconData icon,
+    required String text,
+    Color textColor = AppTheme.gray500,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: AppTheme.gray500),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+              color: textColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _extractPlatformName(String platformWithFormat) {
+    if (platformWithFormat.isEmpty) {
+      return 'Onbekend platform';
+    }
+    final match = RegExp(
+      r'^(.*?)(?:\s*\([^)]*\))?$',
+    ).firstMatch(platformWithFormat);
+    return match?.group(1)?.trim() ?? platformWithFormat;
+  }
+
+  String _extractFormatName(String platformWithFormat, {String? fallback}) {
+    final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+    final value = match?.group(1)?.trim();
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+    return (fallback == null || fallback.isEmpty)
+        ? 'Fysiek & Digitaal'
+        : fallback;
+  }
+
+  IconData _formatIconFor(String formatName) {
+    if (formatName == 'Fysiek') {
+      return LucideIcons.disc;
+    }
+    if (formatName == 'Digitaal') {
+      return LucideIcons.download;
+    }
+    return LucideIcons.layers;
+  }
+
+  Widget _buildCoverBadge({required IconData icon, required String text}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppTheme.orange500),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+              color: AppTheme.orange700,
             ),
           ),
         ],
@@ -836,63 +1030,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           child,
         ],
       ),
-    );
-  }
-
-  Widget _buildTagsSection(CollectionItem item) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (item.activeTags.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: item.activeTags.map((tag) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.orange100),
-                ),
-                child: Text(
-                  tag,
-                  style: const TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: AppTheme.black,
-                  ),
-                ),
-              );
-            }).toList(),
-          )
-        else
-          const Text(
-            'Nog geen actieve tags. Voeg tags toe om deze game beter te organiseren.',
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-              color: AppTheme.gray500,
-            ),
-          ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _showTagsOnboardingSheet,
-          icon: const Icon(LucideIcons.tags, size: 18),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppTheme.orange500,
-            side: const BorderSide(color: AppTheme.orange500),
-          ),
-          label: const Text('Tags toevoegen'),
-        ),
-      ],
     );
   }
 

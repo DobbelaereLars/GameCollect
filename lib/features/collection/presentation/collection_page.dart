@@ -594,123 +594,96 @@ class _CollectionPageState extends State<CollectionPage> {
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.black,
-                                      height: 1.2,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              // Format badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.orange50,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      formatIcon,
-                                      size: 12,
-                                      color: AppTheme.orange500,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      specificFormat,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: AppTheme.orange700,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              if (item.publisher != null &&
-                                  item.publisher!.isNotEmpty)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      LucideIcons.building,
-                                      size: 14,
-                                      color: AppTheme.gray500,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        item.publisher!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: AppTheme.gray500,
-                                              fontSize: 12,
-                                            ),
+                          child: SizedBox(
+                            height: 140,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.black,
+                                        height: 1.2,
                                       ),
-                                    ),
-                                  ],
                                 ),
-                              const SizedBox(height: 8),
-                              LinearProgressIndicator(
-                                value: item.progressRatio,
-                                minHeight: 6,
-                                borderRadius: BorderRadius.circular(999),
-                                backgroundColor: AppTheme.orange100,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  AppTheme.orange500,
-                                ),
-                              ),
-                              if (item.activeTags.isNotEmpty) ...[
                                 const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  children: item.activeTags.take(3).map((tag) {
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.orange50,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        formatIcon,
+                                        size: 12,
+                                        color: AppTheme.orange500,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: AppTheme.orange100,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        tag,
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        specificFormat,
                                         style: Theme.of(context)
                                             .textTheme
-                                            .bodySmall
+                                            .labelSmall
                                             ?.copyWith(
-                                              color: AppTheme.black,
+                                              color: AppTheme.orange700,
                                               fontWeight: FontWeight.w600,
                                             ),
                                       ),
-                                    );
-                                  }).toList(),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(height: 8),
+                                if (item.publisher != null &&
+                                    item.publisher!.isNotEmpty)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        LucideIcons.building,
+                                        size: 14,
+                                        color: AppTheme.gray500,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          item.publisher!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: AppTheme.gray500,
+                                                fontSize: 12,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                const SizedBox(height: 8),
+                                LinearProgressIndicator(
+                                  value: item.progressRatio,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(999),
+                                  backgroundColor: AppTheme.orange100,
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                        AppTheme.orange500,
+                                      ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildCardTagsRow(item),
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -743,6 +716,97 @@ class _CollectionPageState extends State<CollectionPage> {
       color: AppTheme.orange50,
       child: const Center(
         child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 34),
+      ),
+    );
+  }
+
+  Widget _buildCardTagsRow(CollectionItem item) {
+    final previewTags = item.activeTags.take(3).toList(growable: false);
+    final remainingCount = item.activeTags.length - previewTags.length;
+
+    if (previewTags.isEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: item.id == null
+            ? null
+            : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(
+                      itemId: item.id!,
+                      openTagsOnStart: true,
+                    ),
+                  ),
+                );
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(LucideIcons.plus, size: 14, color: AppTheme.orange500),
+              SizedBox(width: 4),
+              Text(
+                'Tags toevoegen',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 24,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ...previewTags.map((tag) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.orange100),
+                  ),
+                  child: Text(
+                    tag,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                ),
+              );
+            }),
+            if (remainingCount > 0)
+              Text(
+                '+$remainingCount meer',
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange700,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
