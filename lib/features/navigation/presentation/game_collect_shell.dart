@@ -70,11 +70,16 @@ class _GameCollectShellState extends State<GameCollectShell> {
 
   void _onCollectionSearchRequest() {
     if (CollectionPage.searchRequest.value != null) {
-      _switchToTab(1);
+      _switchToTabAnimated(1);
     }
   }
 
   void _switchToTab(int index) {
+    setState(() => _currentIndex = index);
+    _pageController.jumpToPage(index);
+  }
+
+  void _switchToTabAnimated(int index) {
     setState(() => _currentIndex = index);
     _pageController.animateToPage(
       index,
