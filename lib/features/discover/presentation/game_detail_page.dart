@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_helper.dart';
+import '../../collection/presentation/collection_page.dart';
 import '../../collection/presentation/widgets/add_to_collection_sheet.dart';
 import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
@@ -289,33 +290,37 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   ),
                   const SizedBox(height: 24),
                 ],
-                // Add to Collection Button
+                // Add to Collection / View in Collection Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: _isAlreadyInCollection
-                        ? null // Disable if already in collection
+                        ? () {
+                            CollectionPage.searchRequest.value = game.title;
+                          }
                         : () async {
                             await AddToCollectionSheet.show(context, game);
                             _checkIfInCollection();
                           },
                     icon: Icon(
                       _isAlreadyInCollection
-                          ? LucideIcons.check
+                          ? LucideIcons.library
                           : LucideIcons.plus,
                       size: 20,
                     ),
                     label: Text(
                       _isAlreadyInCollection
-                          ? 'Toegevoegd aan collectie'
+                          ? 'Bekijk in collectie'
                           : 'Toevoegen aan collectie',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.white,
-                      foregroundColor: AppTheme.orange500,
-                      disabledBackgroundColor: AppTheme.orange500,
-                      disabledForegroundColor: AppTheme.white,
+                      backgroundColor: _isAlreadyInCollection
+                          ? AppTheme.orange500
+                          : AppTheme.white,
+                      foregroundColor: _isAlreadyInCollection
+                          ? AppTheme.white
+                          : AppTheme.orange500,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       elevation: 0,
                       shape: RoundedRectangleBorder(

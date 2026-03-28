@@ -120,7 +120,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.black),
+          icon: const Icon(LucideIcons.chevronLeft, color: AppTheme.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(

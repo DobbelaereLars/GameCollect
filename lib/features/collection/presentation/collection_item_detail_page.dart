@@ -211,6 +211,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         selectedCustomTags.add(value);
         customTagController.clear();
       });
+      FocusManager.instance.primaryFocus?.unfocus();
     }
 
     await showModalBottomSheet<void>(
@@ -1010,6 +1011,11 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               _requirements,
             );
           });
+          ScaffoldMessenger.of(context)
+            ..removeCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(content: Text('Vereiste toegevoegd.')),
+            );
         },
       ),
     );

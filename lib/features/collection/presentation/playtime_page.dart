@@ -157,6 +157,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
     final total = hours * 60 + minutes;
     if (total <= 0) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     final now = DateTime.now();
     final newEntry = PlaytimeEntry(
       id: now.microsecondsSinceEpoch.toString(),
@@ -180,6 +181,12 @@ class _PlaytimePageState extends State<PlaytimePage> {
       _entries = updated;
       _weekOffset = 0;
     });
+
+    final h = hours > 0 ? '${hours}u ' : '';
+    final m = minutes > 0 ? '${minutes} min' : '';
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('${h}${m} speelduur toegevoegd.')));
   }
 
   // ─── Bottom sheet ─────────────────────────────────────────────────────────────

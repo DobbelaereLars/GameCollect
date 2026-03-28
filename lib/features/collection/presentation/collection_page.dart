@@ -10,6 +10,10 @@ import '../../discover/presentation/widgets/discover_search_bar.dart';
 class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key});
 
+  /// Set this to a game title to pre-fill the search bar and clear filters.
+  /// The shell observes this to switch to the collection tab automatically.
+  static final searchRequest = ValueNotifier<String?>(null);
+
   @override
   State<CollectionPage> createState() => _CollectionPageState();
 }
@@ -45,13 +49,27 @@ class _CollectionPageState extends State<CollectionPage> {
     _loadCollection();
     _searchController.addListener(_applyFilters);
     DatabaseHelper.instance.addListener(_loadCollection);
+    CollectionPage.searchRequest.addListener(_onSearchRequest);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     DatabaseHelper.instance.removeListener(_loadCollection);
+    CollectionPage.searchRequest.removeListener(_onSearchRequest);
     super.dispose();
+  }
+
+  void _onSearchRequest() {
+    final query = CollectionPage.searchRequest.value;
+    if (query == null) return;
+    CollectionPage.searchRequest.value = null;
+    _selectedFormats = {};
+    _selectedPlatforms = {};
+    _searchController.removeListener(_applyFilters);
+    _searchController.text = query;
+    _searchController.addListener(_applyFilters);
+    _applyFilters();
   }
 
   Future<void> _loadCollection() async {
@@ -887,7 +905,7 @@ class _CollectionPageState extends State<CollectionPage> {
                           ..showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Verwijderd van $specificPlatform.',
+                                '"${item.title}" verwijderd van $specificPlatform.',
                               ),
                             ),
                           );
@@ -911,9 +929,9 @@ class _CollectionPageState extends State<CollectionPage> {
                         messenger
                           ..removeCurrentSnackBar()
                           ..showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Game volledig verwijderd uit collectie.',
+                                '"${item.title}" volledig verwijderd uit je collectie.',
                               ),
                             ),
                           );
