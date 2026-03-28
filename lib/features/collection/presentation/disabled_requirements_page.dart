@@ -183,8 +183,9 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                             await widget.onToggleCompleted(req.id, newVal);
                             if (!mounted) return;
                             setState(() {
-                              _requirements[index] =
-                                  req.copyWith(isCompleted: newVal);
+                              _requirements[index] = req.copyWith(
+                                isCompleted: newVal,
+                              );
                             });
                           },
                           activeColor: AppTheme.orange500,

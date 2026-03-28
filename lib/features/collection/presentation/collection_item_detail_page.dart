@@ -638,8 +638,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     _requirementSortTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
-          _displayRequirements =
-              _sortedRequirementsByCompletion(_requirements);
+          _displayRequirements = _sortedRequirementsByCompletion(_requirements);
         });
       }
     });
@@ -676,8 +675,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       _requirements = _requirements
           .map((r) => r.id == id ? r.copyWith(isEnabled: enabled) : r)
           .toList(growable: false);
-      _displayRequirements =
-          _sortedRequirementsByCompletion(_requirements);
+      _displayRequirements = _sortedRequirementsByCompletion(_requirements);
     });
   }
 
@@ -690,10 +688,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     await _persistItem(item.copyWith(requirements: updated));
     if (!mounted) return;
     setState(() {
-      _requirements =
-          _requirements.where((r) => r.id != id).toList(growable: false);
-      _displayRequirements =
-          _sortedRequirementsByCompletion(_requirements);
+      _requirements = _requirements
+          .where((r) => r.id != id)
+          .toList(growable: false);
+      _displayRequirements = _sortedRequirementsByCompletion(_requirements);
     });
   }
 
@@ -1045,8 +1043,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           if (!mounted) return;
           setState(() {
             _requirements = List<CustomRequirement>.from(updatedReqs);
-            _displayRequirements =
-                _sortedRequirementsByCompletion(_requirements);
+            _displayRequirements = _sortedRequirementsByCompletion(
+              _requirements,
+            );
           });
         },
       ),
@@ -1123,8 +1122,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       child: _buildPlaytimeSection(item),
                     ),
                     const SizedBox(height: 24),
-                    _buildAchievementsSection(),
-                    const SizedBox(height: 24),
+                    if (_achievements.isNotEmpty) ...[
+                      _buildAchievementsSection(),
+                      const SizedBox(height: 24),
+                    ],
                     _buildRequirementsSection(),
                   ],
                 ),
@@ -1902,10 +1903,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 height: 1.4,
-                color:
-                    allDone && enabled.isNotEmpty
-                        ? AppTheme.orange500
-                        : AppTheme.gray500,
+                color: allDone && enabled.isNotEmpty
+                    ? AppTheme.orange500
+                    : AppTheme.gray500,
               ),
             ),
             const SizedBox(width: 16),
@@ -1969,8 +1969,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               _buildPageButton(
                 icon: LucideIcons.chevronLeft,
                 enabled: safePage > 0,
-                onTap: () =>
-                    setState(() => _requirementPage = safePage - 1),
+                onTap: () => setState(() => _requirementPage = safePage - 1),
               ),
               const SizedBox(width: 12),
               SizedBox(
@@ -1990,8 +1989,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               _buildPageButton(
                 icon: LucideIcons.chevronRight,
                 enabled: safePage < totalPages - 1,
-                onTap: () =>
-                    setState(() => _requirementPage = safePage + 1),
+                onTap: () => setState(() => _requirementPage = safePage + 1),
               ),
             ],
           ),
@@ -2034,8 +2032,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               onTap: () => _showRequirementModal(requirement),
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                 child: Text(
                   displayText,
                   maxLines: 1,
@@ -2183,25 +2180,29 @@ class _AddRequirementSheetContentState
               controller: _titleController,
               cursorColor: AppTheme.orange600,
               inputFormatters: [LengthLimitingTextInputFormatter(30)],
-              style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
-              decoration: _orangeDecoration(
-                labelText: 'Titel (optioneel)',
-                isDense: true,
-              ).copyWith(
-                suffix: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _titleController,
-                  builder: (_, v, __) => Text(
-                    '${v.text.length}/30',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 11,
-                      color: v.text.length == 30
-                          ? AppTheme.orange700
-                          : AppTheme.gray500,
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                color: AppTheme.black,
+              ),
+              decoration:
+                  _orangeDecoration(
+                    labelText: 'Titel (optioneel)',
+                    isDense: true,
+                  ).copyWith(
+                    suffix: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _titleController,
+                      builder: (_, v, __) => Text(
+                        '${v.text.length}/30',
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 11,
+                          color: v.text.length == 30
+                              ? AppTheme.orange700
+                              : AppTheme.gray500,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -2210,36 +2211,39 @@ class _AddRequirementSheetContentState
               cursorColor: AppTheme.orange600,
               inputFormatters: [LengthLimitingTextInputFormatter(250)],
               maxLines: 4,
-              style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
-              decoration: _orangeDecoration(
-                labelText: 'Beschrijving',
-                isDense: true,
-              ).copyWith(
-                alignLabelWithHint: true,
-                floatingLabelBehavior: FloatingLabelBehavior.auto,
-                suffix: _descFocused
-                    ? ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _descriptionController,
-                        builder: (_, v, __) => Text(
-                          '${v.text.length}/250',
-                          style: TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 11,
-                            color: v.text.length == 250
-                                ? AppTheme.orange700
-                                : AppTheme.gray500,
-                          ),
-                        ),
-                      )
-                    : null,
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                color: AppTheme.black,
               ),
+              decoration:
+                  _orangeDecoration(
+                    labelText: 'Beschrijving',
+                    isDense: true,
+                  ).copyWith(
+                    alignLabelWithHint: true,
+                    floatingLabelBehavior: FloatingLabelBehavior.auto,
+                    suffix: _descFocused
+                        ? ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _descriptionController,
+                            builder: (_, v, __) => Text(
+                              '${v.text.length}/250',
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
+                                fontSize: 11,
+                                color: v.text.length == 250
+                                    ? AppTheme.orange700
+                                    : AppTheme.gray500,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
             ),
             const SizedBox(height: 24),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _descriptionController,
               builder: (_, descValue, __) {
-                final canSave =
-                    !_isSaving && descValue.text.trim().isNotEmpty;
+                final canSave = !_isSaving && descValue.text.trim().isNotEmpty;
                 return ElevatedButton.icon(
                   onPressed: canSave
                       ? () async {

@@ -191,9 +191,7 @@ class CollectionItem {
        achievementStates = List<AchievementState>.from(
          achievementStates ?? const [],
        ),
-       requirements = List<CustomRequirement>.from(
-         requirements ?? const [],
-       );
+       requirements = List<CustomRequirement>.from(requirements ?? const []);
 
   CollectionItem copyWith({
     int? id,
@@ -246,7 +244,8 @@ class CollectionItem {
     final enabledReq = requirements.where((r) => r.isEnabled).toList();
     final total = enabledAch.length + enabledReq.length;
     if (total == 0) return 0;
-    final completed = enabledAch.where((s) => s.isCompleted).length +
+    final completed =
+        enabledAch.where((s) => s.isCompleted).length +
         enabledReq.where((r) => r.isCompleted).length;
     return completed / total;
   }
@@ -276,9 +275,7 @@ class CollectionItem {
       'achievementStates': jsonEncode(
         achievementStates.map((s) => s.toMap()).toList(),
       ),
-      'requirements': jsonEncode(
-        requirements.map((r) => r.toMap()).toList(),
-      ),
+      'requirements': jsonEncode(requirements.map((r) => r.toMap()).toList()),
       'addedAt': addedAt.toIso8601String(),
     };
   }
