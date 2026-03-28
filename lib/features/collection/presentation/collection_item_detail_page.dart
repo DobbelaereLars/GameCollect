@@ -9,6 +9,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 import 'disabled_achievements_page.dart';
+import 'disabled_requirements_page.dart';
 import 'notes_page.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
@@ -44,6 +45,12 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   // Achievement pagination & delayed sort
   int _achievementPage = 0;
   Timer? _sortTimer;
+
+  // Requirements
+  List<CustomRequirement> _requirements = [];
+  List<CustomRequirement> _displayRequirements = [];
+  int _requirementPage = 0;
+  Timer? _requirementSortTimer;
 
   InputDecoration _orangeInputDecoration({
     String? hintText,
@@ -86,6 +93,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   @override
   void dispose() {
     _sortTimer?.cancel();
+    _requirementSortTimer?.cancel();
     _hoursController.dispose();
     _minutesController.dispose();
     super.dispose();
@@ -137,6 +145,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       _item = item;
       _achievements = achievements;
       _displayAchievements = _sortedByCompletion(achievements);
+      _requirements = List<CustomRequirement>.from(item!.requirements);
+      _displayRequirements = _sortedRequirementsByCompletion(item.requirements);
       _isLoading = false;
     });
 
@@ -614,6 +624,79 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     ];
   }
 
+  List<CustomRequirement> _sortedRequirementsByCompletion(
+    List<CustomRequirement> src,
+  ) {
+    return [
+      ...src.where((r) => !r.isCompleted),
+      ...src.where((r) => r.isCompleted),
+    ];
+  }
+
+  void _scheduleRequirementSortDelay() {
+    _requirementSortTimer?.cancel();
+    _requirementSortTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _displayRequirements =
+              _sortedRequirementsByCompletion(_requirements);
+        });
+      }
+    });
+  }
+
+  Future<void> _toggleRequirementCompleted(String id, bool value) async {
+    final item = _item;
+    if (item == null) return;
+    final updated = item.requirements
+        .map((r) => r.id == id ? r.copyWith(isCompleted: value) : r)
+        .toList(growable: false);
+    await _persistItem(item.copyWith(requirements: updated));
+    if (!mounted) return;
+    setState(() {
+      _requirements = _requirements
+          .map((r) => r.id == id ? r.copyWith(isCompleted: value) : r)
+          .toList(growable: false);
+      _displayRequirements = _displayRequirements
+          .map((r) => r.id == id ? r.copyWith(isCompleted: value) : r)
+          .toList(growable: false);
+    });
+    _scheduleRequirementSortDelay();
+  }
+
+  Future<void> _toggleRequirementEnabled(String id, bool enabled) async {
+    final item = _item;
+    if (item == null) return;
+    final updated = item.requirements
+        .map((r) => r.id == id ? r.copyWith(isEnabled: enabled) : r)
+        .toList(growable: false);
+    await _persistItem(item.copyWith(requirements: updated));
+    if (!mounted) return;
+    setState(() {
+      _requirements = _requirements
+          .map((r) => r.id == id ? r.copyWith(isEnabled: enabled) : r)
+          .toList(growable: false);
+      _displayRequirements =
+          _sortedRequirementsByCompletion(_requirements);
+    });
+  }
+
+  Future<void> _deleteRequirement(String id) async {
+    final item = _item;
+    if (item == null) return;
+    final updated = item.requirements
+        .where((r) => r.id != id)
+        .toList(growable: false);
+    await _persistItem(item.copyWith(requirements: updated));
+    if (!mounted) return;
+    setState(() {
+      _requirements =
+          _requirements.where((r) => r.id != id).toList(growable: false);
+      _displayRequirements =
+          _sortedRequirementsByCompletion(_requirements);
+    });
+  }
+
   Future<void> _toggleAchievementCompleted(int rawgId, bool value) async {
     final item = _item;
     if (item == null) return;
@@ -797,6 +880,179 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  void _showRequirementModal(CustomRequirement requirement) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (requirement.title?.isNotEmpty == true) ...[
+                  Text(
+                    requirement.title!,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    requirement.description,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
+                      color: AppTheme.gray700,
+                    ),
+                  ),
+                ] else
+                  Text(
+                    requirement.description,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
+                      color: AppTheme.gray700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+              child: const Text('Sluiten'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteRequirementConfirmSheet(String id) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Vereiste verwijderen?',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Deze vereiste wordt permanent verwijderd uit je collectie.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  await _deleteRequirement(id);
+                },
+                icon: const Icon(LucideIcons.trash2, size: 18),
+                label: const Text(
+                  'Verwijderen',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showAddRequirementSheet() async {
+    final item = _item;
+    if (item == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _AddRequirementSheetContent(
+        onSave: (title, description) async {
+          final newReq = CustomRequirement(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            title: title.isEmpty ? null : title,
+            description: description,
+            isCompleted: false,
+            isEnabled: true,
+          );
+          final updatedReqs = [...item.requirements, newReq];
+          await _persistItem(item.copyWith(requirements: updatedReqs));
+          if (!mounted) return;
+          setState(() {
+            _requirements = List<CustomRequirement>.from(updatedReqs);
+            _displayRequirements =
+                _sortedRequirementsByCompletion(_requirements);
+          });
+        },
+      ),
+    );
+  }
+
   String _toDateKey(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
@@ -868,6 +1124,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                     ),
                     const SizedBox(height: 24),
                     _buildAchievementsSection(),
+                    const SizedBox(height: 24),
+                    _buildRequirementsSection(),
                   ],
                 ),
               ),
@@ -1590,6 +1848,439 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         LucideIcons.trophy,
         size: 18,
         color: AppTheme.orange300,
+      ),
+    );
+  }
+
+  Widget _buildRequirementsSection() {
+    final enabled = _displayRequirements.where((r) => r.isEnabled).toList();
+    final disabled = _requirements.where((r) => !r.isEnabled).toList();
+    final completedCount = enabled.where((r) => r.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
+    final safePage = _requirementPage.clamp(0, totalPages - 1);
+    final pageStart = safePage * _achievementsPerPage;
+    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
+    final pageItems = enabled.isEmpty
+        ? <CustomRequirement>[]
+        : enabled.sublist(pageStart, pageEnd);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Vereisten',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: _showAddRequirementSheet,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  LucideIcons.plus,
+                  size: 18,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color:
+                    allDone && enabled.isNotEmpty
+                        ? AppTheme.orange500
+                        : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledRequirementsPage(
+                    initialRequirements: disabled,
+                    onToggleCompleted: _toggleRequirementCompleted,
+                    onToggleEnabled: _toggleRequirementEnabled,
+                    onDelete: _deleteRequirement,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (enabled.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Nog geen vereisten. Tik op + om er een toe te voegen.',
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+                color: AppTheme.gray500,
+              ),
+            ),
+          )
+        else
+          ...pageItems.map((r) => _buildRequirementTile(r)),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPageButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () =>
+                    setState(() => _requirementPage = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildPageButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () =>
+                    setState(() => _requirementPage = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRequirementTile(CustomRequirement requirement) {
+    final isDisabled = !requirement.isEnabled;
+    final displayText = requirement.title?.isNotEmpty == true
+        ? requirement.title!
+        : requirement.description;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: requirement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) => _toggleRequirementCompleted(
+                      requirement.id,
+                      value ?? false,
+                    ),
+              activeColor: AppTheme.orange500,
+              side: const BorderSide(color: AppTheme.gray300),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => _showRequirementModal(requirement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Text(
+                  displayText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    color: isDisabled ? AppTheme.gray300 : AppTheme.black,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _toggleRequirementEnabled(
+              requirement.id,
+              !requirement.isEnabled,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _showDeleteRequirementConfirmSheet(requirement.id),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.trash2,
+                size: 18,
+                color: AppTheme.gray500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Add-requirement sheet ────────────────────────────────────────────────────
+
+class _AddRequirementSheetContent extends StatefulWidget {
+  const _AddRequirementSheetContent({required this.onSave});
+
+  final Future<void> Function(String title, String description) onSave;
+
+  @override
+  State<_AddRequirementSheetContent> createState() =>
+      _AddRequirementSheetContentState();
+}
+
+class _AddRequirementSheetContentState
+    extends State<_AddRequirementSheetContent> {
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _descFocusNode = FocusNode();
+  bool _descFocused = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _descFocusNode.addListener(_onDescFocusChange);
+  }
+
+  void _onDescFocusChange() {
+    if (mounted) setState(() => _descFocused = _descFocusNode.hasFocus);
+  }
+
+  @override
+  void dispose() {
+    _descFocusNode.removeListener(_onDescFocusChange);
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _descFocusNode.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _orangeDecoration({
+    required String labelText,
+    bool isDense = true,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      isDense: isDense,
+      labelStyle: const TextStyle(
+        fontFamily: 'Manrope',
+        color: AppTheme.orange700,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppTheme.orange600, width: 1.5),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 40,
+      ),
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Vereiste toevoegen',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppTheme.black,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleController,
+              cursorColor: AppTheme.orange600,
+              inputFormatters: [LengthLimitingTextInputFormatter(30)],
+              style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
+              decoration: _orangeDecoration(
+                labelText: 'Titel (optioneel)',
+                isDense: true,
+              ).copyWith(
+                suffix: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _titleController,
+                  builder: (_, v, __) => Text(
+                    '${v.text.length}/30',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      color: v.text.length == 30
+                          ? AppTheme.orange700
+                          : AppTheme.gray500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              focusNode: _descFocusNode,
+              cursorColor: AppTheme.orange600,
+              inputFormatters: [LengthLimitingTextInputFormatter(250)],
+              maxLines: 4,
+              style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
+              decoration: _orangeDecoration(
+                labelText: 'Beschrijving',
+                isDense: true,
+              ).copyWith(
+                alignLabelWithHint: true,
+                floatingLabelBehavior: FloatingLabelBehavior.auto,
+                suffix: _descFocused
+                    ? ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _descriptionController,
+                        builder: (_, v, __) => Text(
+                          '${v.text.length}/250',
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
+                            fontSize: 11,
+                            color: v.text.length == 250
+                                ? AppTheme.orange700
+                                : AppTheme.gray500,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _descriptionController,
+              builder: (_, descValue, __) {
+                final canSave =
+                    !_isSaving && descValue.text.trim().isNotEmpty;
+                return ElevatedButton.icon(
+                  onPressed: canSave
+                      ? () async {
+                          setState(() => _isSaving = true);
+                          await widget.onSave(
+                            _titleController.text.trim(),
+                            _descriptionController.text.trim(),
+                          );
+                          if (!mounted) return;
+                          Navigator.of(context).pop();
+                        }
+                      : null,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: AppTheme.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(LucideIcons.save, size: 18),
+                  label: const Text(
+                    'Opslaan',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.orange500,
+                    foregroundColor: AppTheme.white,
+                    disabledBackgroundColor: AppTheme.orange100,
+                    disabledForegroundColor: AppTheme.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

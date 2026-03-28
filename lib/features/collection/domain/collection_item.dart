@@ -94,6 +94,57 @@ class GameAchievementWithState {
   }
 }
 
+class CustomRequirement {
+  const CustomRequirement({
+    required this.id,
+    this.title,
+    required this.description,
+    required this.isCompleted,
+    required this.isEnabled,
+  });
+
+  final String id;
+  final String? title;
+  final String description;
+  final bool isCompleted;
+  final bool isEnabled;
+
+  CustomRequirement copyWith({
+    String? id,
+    String? description,
+    bool? isCompleted,
+    bool? isEnabled,
+  }) {
+    return CustomRequirement(
+      id: id ?? this.id,
+      title: this.title,
+      description: description ?? this.description,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isEnabled: isEnabled ?? this.isEnabled,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'isCompleted': isCompleted,
+      'isEnabled': isEnabled,
+    };
+  }
+
+  factory CustomRequirement.fromMap(Map<String, dynamic> map) {
+    return CustomRequirement(
+      id: map['id'] as String? ?? '',
+      title: map['title'] as String?,
+      description: map['description'] as String? ?? '',
+      isCompleted: map['isCompleted'] as bool? ?? false,
+      isEnabled: map['isEnabled'] as bool? ?? true,
+    );
+  }
+}
+
 class CollectionItem {
   final int? id;
   final int apiId;
@@ -109,6 +160,7 @@ class CollectionItem {
   final String notes;
   final List<PlaytimeEntry> playtimeEntries;
   final List<AchievementState> achievementStates;
+  final List<CustomRequirement> requirements;
   final DateTime addedAt;
 
   CollectionItem({
@@ -126,6 +178,7 @@ class CollectionItem {
     required this.notes,
     List<PlaytimeEntry>? playtimeEntries,
     List<AchievementState>? achievementStates,
+    List<CustomRequirement>? requirements,
     required this.addedAt,
   }) : selectedPlatforms = List<String>.from(selectedPlatforms ?? const []),
        suggestedTags = List<String>.from(suggestedTags ?? const []),
@@ -137,6 +190,9 @@ class CollectionItem {
        playtimeEntries = List<PlaytimeEntry>.from(playtimeEntries ?? const []),
        achievementStates = List<AchievementState>.from(
          achievementStates ?? const [],
+       ),
+       requirements = List<CustomRequirement>.from(
+         requirements ?? const [],
        );
 
   CollectionItem copyWith({
@@ -154,6 +210,7 @@ class CollectionItem {
     String? notes,
     List<PlaytimeEntry>? playtimeEntries,
     List<AchievementState>? achievementStates,
+    List<CustomRequirement>? requirements,
     DateTime? addedAt,
   }) {
     return CollectionItem(
@@ -172,6 +229,7 @@ class CollectionItem {
       notes: notes ?? this.notes,
       playtimeEntries: playtimeEntries ?? this.playtimeEntries,
       achievementStates: achievementStates ?? this.achievementStates,
+      requirements: requirements ?? this.requirements,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -184,9 +242,13 @@ class CollectionItem {
   }
 
   double get progressRatio {
-    final enabled = achievementStates.where((s) => s.isEnabled).toList();
-    if (enabled.isEmpty) return 0;
-    return enabled.where((s) => s.isCompleted).length / enabled.length;
+    final enabledAch = achievementStates.where((s) => s.isEnabled).toList();
+    final enabledReq = requirements.where((r) => r.isEnabled).toList();
+    final total = enabledAch.length + enabledReq.length;
+    if (total == 0) return 0;
+    final completed = enabledAch.where((s) => s.isCompleted).length +
+        enabledReq.where((r) => r.isCompleted).length;
+    return completed / total;
   }
 
   int get totalPlaytimeMinutes {
@@ -213,6 +275,9 @@ class CollectionItem {
       ),
       'achievementStates': jsonEncode(
         achievementStates.map((s) => s.toMap()).toList(),
+      ),
+      'requirements': jsonEncode(
+        requirements.map((r) => r.toMap()).toList(),
       ),
       'addedAt': addedAt.toIso8601String(),
     };
@@ -272,6 +337,25 @@ class CollectionItem {
       }
     }
 
+    List<CustomRequirement> parseRequirements(dynamic value) {
+      if (value is! String || value.isEmpty) {
+        return const <CustomRequirement>[];
+      }
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is! List<dynamic>) {
+          return const <CustomRequirement>[];
+        }
+        return decoded
+            .whereType<Map>()
+            .map((raw) => Map<String, dynamic>.from(raw))
+            .map(CustomRequirement.fromMap)
+            .toList(growable: false);
+      } catch (_) {
+        return const <CustomRequirement>[];
+      }
+    }
+
     final legacyTags = parseStringList(map['tags']);
     final suggestedTags = parseStringList(map['suggestedTags']);
     final selectedSuggestedTags = parseStringList(map['selectedSuggestedTags']);
@@ -305,6 +389,7 @@ class CollectionItem {
       notes: map['notes'] as String? ?? '',
       playtimeEntries: parsePlaytimeEntries(map['playtimeEntries']),
       achievementStates: parseAchievementStates(map['achievementStates']),
+      requirements: parseRequirements(map['requirements']),
       addedAt: DateTime.parse(map['addedAt'] as String),
     );
   }
