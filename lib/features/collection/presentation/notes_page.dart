@@ -192,7 +192,7 @@ class _NotesPageState extends State<NotesPage> {
           surfaceTintColor: AppTheme.white,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(LucideIcons.arrowLeft, size: 22),
+            icon: const Icon(LucideIcons.chevronLeft),
             onPressed: _popWithSave,
           ),
           title: const Text(

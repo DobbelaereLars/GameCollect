@@ -134,7 +134,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
         scrolledUnderElevation: 0,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.black),
+          icon: const Icon(LucideIcons.chevronLeft, color: AppTheme.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(

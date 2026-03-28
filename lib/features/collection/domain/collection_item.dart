@@ -1,19 +1,38 @@
 import 'dart:convert';
 
 class PlaytimeEntry {
-  const PlaytimeEntry({required this.date, required this.minutes});
+  const PlaytimeEntry({
+    required this.id,
+    required this.date,
+    required this.minutes,
+    required this.addedAt,
+  });
 
+  final String id;
   final String date;
   final int minutes;
+  final DateTime addedAt;
 
   Map<String, dynamic> toMap() {
-    return {'date': date, 'minutes': minutes};
+    return {
+      'id': id,
+      'date': date,
+      'minutes': minutes,
+      'addedAt': addedAt.toIso8601String(),
+    };
   }
 
   factory PlaytimeEntry.fromMap(Map<String, dynamic> map) {
+    final date = map['date'] as String? ?? '';
+    final id = map['id'] as String? ?? '${date}_legacy';
+    final addedAt = map['addedAt'] != null
+        ? DateTime.tryParse(map['addedAt'] as String) ?? DateTime.now()
+        : DateTime.now();
     return PlaytimeEntry(
-      date: map['date'] as String? ?? '',
+      id: id,
+      date: date,
       minutes: map['minutes'] as int? ?? 0,
+      addedAt: addedAt,
     );
   }
 }

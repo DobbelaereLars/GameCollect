@@ -11,6 +11,7 @@ import '../domain/collection_item.dart';
 import 'disabled_achievements_page.dart';
 import 'disabled_requirements_page.dart';
 import 'notes_page.dart';
+import 'playtime_page.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
   const CollectionItemDetailPage({
@@ -31,9 +32,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   static const int _maxActiveTags = 10;
   static const int _maxCustomTagLength = 15;
   static const int _achievementsPerPage = 10;
-
-  final TextEditingController _hoursController = TextEditingController();
-  final TextEditingController _minutesController = TextEditingController();
 
   CollectionItem? _item;
   bool _isLoading = true;
@@ -94,8 +92,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   void dispose() {
     _sortTimer?.cancel();
     _requirementSortTimer?.cancel();
-    _hoursController.dispose();
-    _minutesController.dispose();
     super.dispose();
   }
 
@@ -569,39 +565,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  Future<void> _addPlaytime() async {
-    final item = _item;
-    if (item == null) return;
-
-    final hours = int.tryParse(_hoursController.text.trim()) ?? 0;
-    final minutes = int.tryParse(_minutesController.text.trim()) ?? 0;
-    final total = max(0, hours * 60 + minutes);
-
-    if (total <= 0) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final dateKey = _toDateKey(now);
-
-    final entries = List<PlaytimeEntry>.from(item.playtimeEntries);
-    final existingIndex = entries.indexWhere((e) => e.date == dateKey);
-    if (existingIndex >= 0) {
-      final existing = entries[existingIndex];
-      entries[existingIndex] = PlaytimeEntry(
-        date: existing.date,
-        minutes: existing.minutes + total,
-      );
-    } else {
-      entries.add(PlaytimeEntry(date: dateKey, minutes: total));
-    }
-
-    _hoursController.clear();
-    _minutesController.clear();
-
-    await _persistItem(item.copyWith(playtimeEntries: entries));
-  }
-
   // Reschedule the delayed sort — resets the timer on every toggle so rapid
   // tapping doesn't cause premature reordering.
   void _scheduleSortDelay() {
@@ -1052,12 +1015,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  String _toDateKey(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day';
-  }
-
   String _formatMinutes(int totalMinutes) {
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
@@ -1065,14 +1022,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       return '$minutes min';
     }
     return '${hours}u ${minutes}m';
-  }
-
-  String _formatDateLabel(String key) {
-    final parts = key.split('-');
-    if (parts.length != 3) {
-      return key;
-    }
-    return '${parts[2]}/${parts[1]}';
   }
 
   @override
@@ -1096,6 +1045,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         backgroundColor: AppTheme.white,
         foregroundColor: AppTheme.black,
         surfaceTintColor: AppTheme.white,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.chevronLeft),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(
           item.title,
           maxLines: 1,
@@ -1110,23 +1063,28 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         children: [
           Positioned.fill(
             child: SafeArea(
+              bottom: false,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 170),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHeader(item),
-                    const SizedBox(height: 12),
-                    _buildSection(
-                      title: 'Speeltijd',
-                      child: _buildPlaytimeSection(item),
-                    ),
-                    const SizedBox(height: 24),
                     if (_achievements.isNotEmpty) ...[
-                      _buildAchievementsSection(),
                       const SizedBox(height: 24),
+                      const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                      const SizedBox(height: 24),
+                      _buildAchievementsSection(),
                     ],
+                    const SizedBox(height: 24),
+                    const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                    const SizedBox(height: 24),
                     _buildRequirementsSection(),
+                    const SizedBox(height: 24),
+                    const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                    const SizedBox(height: 24),
+                    _buildPlaytimeSummaryTile(item),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -1424,179 +1382,84 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  Widget _buildSection({
-    required String title,
-    required Widget child,
-    Widget? trailing,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        border: Border.all(color: AppTheme.gray100),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                    color: AppTheme.black,
-                  ),
-                ),
-              ),
-              trailing ?? const SizedBox.shrink(),
-            ],
+  Widget _buildPlaytimeSummaryTile(CollectionItem item) {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => PlaytimePage(
+              itemId: item.id!,
+              gameTitle: item.title,
+              initialEntries: item.playtimeEntries,
+            ),
           ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaytimeSection(CollectionItem item) {
-    final sortedEntries = List<PlaytimeEntry>.from(item.playtimeEntries)
-      ..sort((a, b) => a.date.compareTo(b.date));
-    final chartEntries = sortedEntries.length <= 10
-        ? sortedEntries
-        : sortedEntries.sublist(sortedEntries.length - 10);
-    final maxMinutes = chartEntries.isEmpty
-        ? 0
-        : chartEntries.map((e) => e.minutes).reduce(max);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Totaal: ${_formatMinutes(item.totalPlaytimeMinutes)} (${item.totalPlaytimeMinutes} min)',
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-            height: 1.5,
-            color: AppTheme.black,
-          ),
+        );
+        final refreshed = await DatabaseHelper.instance
+            .getCollectionItemById(widget.itemId);
+        if (mounted && refreshed != null) {
+          setState(() => _item = refreshed);
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
         ),
-        const SizedBox(height: 12),
-        Row(
+        child: Row(
           children: [
-            Expanded(
-              child: TextField(
-                controller: _hoursController,
-                keyboardType: TextInputType.number,
-                cursorColor: AppTheme.orange600,
-                style: const TextStyle(
-                  fontFamily: 'Manrope',
-                  color: AppTheme.black,
-                ),
-                decoration: _orangeInputDecoration(labelText: 'Uren'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.clock,
+                size: 18,
+                color: AppTheme.orange600,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Expanded(
-              child: TextField(
-                controller: _minutesController,
-                keyboardType: TextInputType.number,
-                cursorColor: AppTheme.orange600,
-                style: const TextStyle(
-                  fontFamily: 'Manrope',
-                  color: AppTheme.black,
-                ),
-                decoration: _orangeInputDecoration(labelText: 'Minuten'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _addPlaytime,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.orange500,
-                  foregroundColor: AppTheme.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Speelduur',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
                   ),
-                ),
-                child: const Text('Opslaan'),
+                  Text(
+                    item.totalPlaytimeMinutes == 0
+                        ? 'Nog geen speelduur geregistreerd'
+                        : _formatMinutes(item.totalPlaytimeMinutes),
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: item.totalPlaytimeMinutes == 0
+                          ? AppTheme.gray300
+                          : AppTheme.gray500,
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: AppTheme.gray300,
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        if (chartEntries.isEmpty)
-          const Text(
-            'Nog geen speelduur toegevoegd.',
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-              color: AppTheme.gray500,
-            ),
-          )
-        else
-          SizedBox(
-            height: 170,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: chartEntries.map((entry) {
-                final fraction = maxMinutes == 0
-                    ? 0.0
-                    : entry.minutes / maxMinutes;
-                final height = 24 + (fraction * 96);
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${entry.minutes}m',
-                          style: const TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            height: 1.4,
-                            color: AppTheme.gray700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: AppTheme.orange500,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _formatDateLabel(entry.date),
-                          style: const TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            height: 1.4,
-                            color: AppTheme.gray500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-      ],
+      ),
     );
   }
 
