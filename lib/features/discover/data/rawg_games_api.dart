@@ -71,25 +71,35 @@ class RawgGamesApi {
     required String apiKey,
     required int id,
   }) async {
-    final uri = Uri.https('api.rawg.io', '/api/games/$id/achievements', {
+    final all = <RawgAchievement>[];
+    String? nextUrl = Uri.https('api.rawg.io', '/api/games/$id/achievements', {
       'key': apiKey,
       'page_size': '40',
-    });
+    }).toString();
 
-    final response = await client.get(uri).timeout(const Duration(seconds: 12));
+    while (nextUrl != null) {
+      final response = await client
+          .get(Uri.parse(nextUrl))
+          .timeout(const Duration(seconds: 12));
 
-    if (response.statusCode != 200) {
-      throw Exception(
-        'RAWG achievements request mislukt (${response.statusCode}).',
+      if (response.statusCode != 200) {
+        throw Exception(
+          'RAWG achievements request mislukt (${response.statusCode}).',
+        );
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final results = decoded['results'] as List<dynamic>? ?? const [];
+
+      all.addAll(
+        results
+            .whereType<Map<String, dynamic>>()
+            .map(RawgAchievement.fromJson),
       );
+
+      nextUrl = decoded['next'] as String?;
     }
 
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    final results = decoded['results'] as List<dynamic>? ?? const [];
-
-    return results
-        .whereType<Map<String, dynamic>>()
-        .map(RawgAchievement.fromJson)
-        .toList(growable: false);
+    return List.unmodifiable(all);
   }
 }

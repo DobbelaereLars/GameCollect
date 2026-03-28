@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
+import 'disabled_achievements_page.dart';
 import 'notes_page.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
@@ -27,16 +29,21 @@ class CollectionItemDetailPage extends StatefulWidget {
 class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   static const int _maxActiveTags = 10;
   static const int _maxCustomTagLength = 15;
+  static const int _achievementsPerPage = 10;
 
   final TextEditingController _hoursController = TextEditingController();
   final TextEditingController _minutesController = TextEditingController();
-  final TextEditingController _requirementTitleController =
-      TextEditingController();
 
   CollectionItem? _item;
   bool _isLoading = true;
-  bool _showDisabledRequirements = false;
   bool _hasOpenedTagsOnStart = false;
+  List<GameAchievementWithState> _achievements = [];
+  // Stable display order — only re-sorted after the delay timer fires
+  List<GameAchievementWithState> _displayAchievements = [];
+
+  // Achievement pagination & delayed sort
+  int _achievementPage = 0;
+  Timer? _sortTimer;
 
   InputDecoration _orangeInputDecoration({
     String? hintText,
@@ -78,9 +85,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
 
   @override
   void dispose() {
+    _sortTimer?.cancel();
     _hoursController.dispose();
     _minutesController.dispose();
-    _requirementTitleController.dispose();
     super.dispose();
   }
 
@@ -89,29 +96,54 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       _isLoading = true;
     });
 
-    final item = await DatabaseHelper.instance.getCollectionItemById(
+    var item = await DatabaseHelper.instance.getCollectionItemById(
       widget.itemId,
     );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (item == null) {
       Navigator.of(context).pop();
       return;
     }
 
+    var achievements = await DatabaseHelper.instance.getAchievementsWithStates(
+      item.apiId,
+      item.achievementStates,
+    );
+
+    // If achievements exist in game_achievements but states aren't tracked yet
+    // (e.g. game was added before this feature), initialise them.
+    if (achievements.isNotEmpty && item.achievementStates.isEmpty) {
+      final newStates = achievements
+          .map(
+            (a) => AchievementState(
+              rawgId: a.rawgId,
+              isCompleted: false,
+              isEnabled: true,
+            ),
+          )
+          .toList(growable: false);
+      final updated = item.copyWith(achievementStates: newStates);
+      await DatabaseHelper.instance.updateCollectionItem(updated);
+      item = updated;
+      achievements = await DatabaseHelper.instance.getAchievementsWithStates(
+        item.apiId,
+        item.achievementStates,
+      );
+    }
+
+    if (!mounted) return;
     setState(() {
       _item = item;
+      _achievements = achievements;
+      _displayAchievements = _sortedByCompletion(achievements);
       _isLoading = false;
     });
 
     if (widget.openTagsOnStart && !_hasOpenedTagsOnStart) {
       _hasOpenedTagsOnStart = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         _showTagsOnboardingSheet();
       });
     }
@@ -560,64 +592,211 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     await _persistItem(item.copyWith(playtimeEntries: entries));
   }
 
-  Future<void> _toggleRequirementCompletion(
-    GameRequirement requirement,
-    bool value,
-  ) async {
+  // Reschedule the delayed sort — resets the timer on every toggle so rapid
+  // tapping doesn't cause premature reordering.
+  void _scheduleSortDelay() {
+    _sortTimer?.cancel();
+    _sortTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _displayAchievements = _sortedByCompletion(_achievements);
+        });
+      }
+    });
+  }
+
+  List<GameAchievementWithState> _sortedByCompletion(
+    List<GameAchievementWithState> src,
+  ) {
+    return [
+      ...src.where((a) => !a.isCompleted),
+      ...src.where((a) => a.isCompleted),
+    ];
+  }
+
+  Future<void> _toggleAchievementCompleted(int rawgId, bool value) async {
     final item = _item;
     if (item == null) return;
 
-    final updated = item.requirements
-        .map((r) => r.id == requirement.id ? r.copyWith(isCompleted: value) : r)
+    final baseStates = item.achievementStates.isNotEmpty
+        ? item.achievementStates
+        : _achievements
+              .map(
+                (a) => AchievementState(
+                  rawgId: a.rawgId,
+                  isCompleted: false,
+                  isEnabled: a.isEnabled,
+                ),
+              )
+              .toList();
+
+    final updatedStates = baseStates
+        .map((s) => s.rawgId == rawgId ? s.copyWith(isCompleted: value) : s)
         .toList(growable: false);
 
-    await _persistItem(item.copyWith(requirements: updated));
+    await _persistItem(item.copyWith(achievementStates: updatedStates));
+    if (!mounted) return;
+    // Update the completion state immediately — sorting happens after the delay
+    setState(() {
+      _achievements = _achievements
+          .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
+          .toList(growable: false);
+      // Mirror the change in displayAchievements without resorting yet
+      _displayAchievements = _displayAchievements
+          .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
+          .toList(growable: false);
+    });
+    _scheduleSortDelay();
   }
 
-  Future<void> _toggleRequirementEnabled(
-    GameRequirement requirement,
-    bool enabled,
-  ) async {
+  Future<void> _toggleAchievementEnabled(int rawgId, bool enabled) async {
     final item = _item;
     if (item == null) return;
 
-    final updated = item.requirements
-        .map((r) => r.id == requirement.id ? r.copyWith(isEnabled: enabled) : r)
+    final baseStates = item.achievementStates.isNotEmpty
+        ? item.achievementStates
+        : _achievements
+              .map(
+                (a) => AchievementState(
+                  rawgId: a.rawgId,
+                  isCompleted: a.isCompleted,
+                  isEnabled: true,
+                ),
+              )
+              .toList();
+
+    final updatedStates = baseStates
+        .map((s) => s.rawgId == rawgId ? s.copyWith(isEnabled: enabled) : s)
         .toList(growable: false);
 
-    await _persistItem(item.copyWith(requirements: updated));
+    await _persistItem(item.copyWith(achievementStates: updatedStates));
+    if (!mounted) return;
+    setState(() {
+      _achievements = _achievements
+          .map((a) => a.rawgId == rawgId ? a.copyWith(isEnabled: enabled) : a)
+          .toList(growable: false);
+      _displayAchievements = _sortedByCompletion(_achievements);
+    });
   }
 
-  Future<void> _addCustomRequirement() async {
-    final item = _item;
-    if (item == null) return;
-
-    final title = _requirementTitleController.text.trim();
-    if (title.isEmpty) {
-      return;
-    }
-
-    final requirement = GameRequirement(
-      id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
-      title: title,
-      description: '',
-      isCompleted: false,
-      isCustom: true,
-      isEnabled: true,
+  void _showAchievementModal(GameAchievementWithState achievement) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (achievement.imageUrl != null)
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        achievement.imageUrl!,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, e, s) => Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            LucideIcons.trophy,
+                            size: 36,
+                            color: AppTheme.orange300,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Center(
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: AppTheme.orange50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        LucideIcons.trophy,
+                        size: 36,
+                        color: AppTheme.orange300,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Text(
+                  achievement.name,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                    color: AppTheme.black,
+                  ),
+                ),
+                if (achievement.description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    achievement.description,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
+                      color: AppTheme.gray700,
+                    ),
+                  ),
+                ],
+                if (achievement.percent != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.users,
+                        size: 14,
+                        color: AppTheme.gray500,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${achievement.percent!.toStringAsFixed(1)}% van spelers behaald',
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                          color: AppTheme.gray500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.gray700,
+              ),
+              child: const Text('Sluiten'),
+            ),
+          ],
+        );
+      },
     );
-
-    final updated = List<GameRequirement>.from(item.requirements)
-      ..add(requirement);
-    _requirementTitleController.clear();
-    await _persistItem(
-      item.copyWith(requirements: updated, isManuallyCompleted: false),
-    );
-  }
-
-  Future<void> _toggleManualCompleted(bool value) async {
-    final item = _item;
-    if (item == null) return;
-    await _persistItem(item.copyWith(isManuallyCompleted: value));
   }
 
   String _toDateKey(DateTime date) {
@@ -658,12 +837,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       return const SizedBox.shrink();
     }
 
-    final enabledRequirements = item.enabledRequirements;
-    final hasProgressFromRequirements = enabledRequirements.isNotEmpty;
-    final progressText = hasProgressFromRequirements
-        ? '${(item.progressRatio * 100).round()}% (${item.completedEnabledRequirementsCount}/${enabledRequirements.length})'
-        : (item.isManuallyCompleted ? '100%' : '0%');
-
     return Scaffold(
       backgroundColor: AppTheme.white,
       appBar: AppBar(
@@ -695,36 +868,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       title: 'Speeltijd',
                       child: _buildPlaytimeSection(item),
                     ),
-                    const SizedBox(height: 12),
-                    _buildSection(
-                      title: 'Progressie',
-                      trailing: PopupMenuButton<String>(
-                        icon: const Icon(
-                          LucideIcons.ellipsisVertical,
-                          color: AppTheme.gray700,
-                          size: 18,
-                        ),
-                        onSelected: (value) {
-                          if (value == 'toggle_disabled') {
-                            setState(() {
-                              _showDisabledRequirements =
-                                  !_showDisabledRequirements;
-                            });
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem<String>(
-                            value: 'toggle_disabled',
-                            child: Text(
-                              _showDisabledRequirements
-                                  ? 'Verberg niet-gebruikte achievements'
-                                  : 'Toon niet-gebruikte achievements',
-                            ),
-                          ),
-                        ],
-                      ),
-                      child: _buildProgressSection(item, progressText),
-                    ),
+                    const SizedBox(height: 24),
+                    _buildAchievementsSection(),
                   ],
                 ),
               ),
@@ -1198,173 +1343,258 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  Widget _buildProgressSection(CollectionItem item, String progressText) {
-    final visibleRequirements = item.requirements
-        .where((r) => r.isEnabled || _showDisabledRequirements)
-        .toList(growable: false);
+  Widget _buildAchievementsSection() {
+    // No achievements -> hide entire section
+    if (_achievements.isEmpty) return const SizedBox.shrink();
+
+    final enabled = _displayAchievements.where((a) => a.isEnabled).toList();
+    final disabled = _achievements.where((a) => !a.isEnabled).toList();
+    final completedCount = enabled.where((a) => a.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
+    final safePage = _achievementPage.clamp(0, totalPages - 1);
+    final pageStart = safePage * _achievementsPerPage;
+    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
+    final pageItems = enabled.sublist(pageStart, pageEnd);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Voortgang: $progressText',
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-            height: 1.5,
-            color: AppTheme.black,
-          ),
-        ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: item.progressRatio,
-          minHeight: 8,
-          borderRadius: BorderRadius.circular(999),
-          backgroundColor: AppTheme.orange100,
-          valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.orange500),
-        ),
-        const SizedBox(height: 12),
+        // Header row
         Row(
           children: [
-            Expanded(
-              child: TextField(
-                controller: _requirementTitleController,
-                cursorColor: AppTheme.orange600,
-                style: const TextStyle(
+            const Expanded(
+              child: Text(
+                'Achievements',
+                style: TextStyle(
                   fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
                   color: AppTheme.black,
                 ),
-                decoration: _orangeInputDecoration(
-                  hintText: 'Voeg eigen requirement/achievement toe',
-                ),
-                onSubmitted: (_) => _addCustomRequirement(),
               ),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _addCustomRequirement,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.orange500,
-                  foregroundColor: AppTheme.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // Score — oranje als alles afgevinkt
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: allDone ? AppTheme.orange500 : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Eye icon -- zelfde grootte als score, oranje
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledAchievementsPage(
+                    initialAchievements: disabled,
+                    onToggleCompleted: _toggleAchievementCompleted,
+                    onToggleEnabled: _toggleAchievementEnabled,
                   ),
                 ),
-                child: const Text('Toevoegen'),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (visibleRequirements.isEmpty)
-          SwitchListTile.adaptive(
-            value: item.isManuallyCompleted,
-            contentPadding: EdgeInsets.zero,
-            activeThumbColor: AppTheme.orange500,
-            title: const Text('Markeer deze game als 100% completed'),
-            subtitle: const Text(
-              'Er zijn geen achievements of requirements actief.',
-            ),
-            onChanged: _toggleManualCompleted,
-          )
-        else
-          Column(
-            children: visibleRequirements.map((requirement) {
-              final disabled = !requirement.isEnabled;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: disabled ? AppTheme.gray100 : AppTheme.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.gray100),
+        const SizedBox(height: 4),
+
+        // Paginated enabled achievements
+        ...pageItems.map((a) => _buildAchievementTile(a)),
+
+        // Pagination controls -- fixed-width counter prevents button drift
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPageButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () => setState(() => _achievementPage = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 2,
-                  ),
-                  leading: Checkbox(
-                    value: requirement.isCompleted,
-                    onChanged: disabled
-                        ? null
-                        : (value) => _toggleRequirementCompletion(
-                            requirement,
-                            value ?? false,
-                          ),
-                    activeColor: AppTheme.orange500,
-                  ),
-                  title: Text(
-                    requirement.title,
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      height: 1.5,
-                      color: AppTheme.black,
+              ),
+              const SizedBox(width: 12),
+              _buildPageButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () => setState(() => _achievementPage = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPageButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? AppTheme.orange50 : AppTheme.gray100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: enabled ? AppTheme.orange200 : AppTheme.gray100,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? AppTheme.orange700 : AppTheme.gray300,
+        ),
+      ),
+    );
+  }
+
+    Widget _buildAchievementTile(GameAchievementWithState achievement) {
+    final isDisabled = !achievement.isEnabled;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: achievement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) => _toggleAchievementCompleted(
+                      achievement.rawgId,
+                      value ?? false,
                     ),
-                  ),
-                  subtitle: requirement.description.isEmpty
-                      ? Text(
-                          requirement.isCustom
-                              ? (disabled
-                                    ? 'Eigen requirement (niet gebruikt)'
-                                    : 'Eigen requirement')
-                              : (disabled
-                                    ? 'RAWG achievement (niet gebruikt)'
-                                    : 'RAWG achievement'),
-                          style: const TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            height: 1.4,
-                            color: AppTheme.gray500,
-                          ),
-                        )
-                      : Text(
-                          requirement.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            height: 1.4,
-                            color: AppTheme.gray500,
-                          ),
-                        ),
-                  trailing: PopupMenuButton<String>(
-                    icon: const Icon(
-                      LucideIcons.ellipsisVertical,
-                      size: 18,
-                      color: AppTheme.gray700,
+              activeColor: AppTheme.orange500,
+              side: BorderSide(
+                color: isDisabled ? AppTheme.gray300 : AppTheme.gray300,
+              ),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => _showAchievementModal(achievement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: achievement.imageUrl != null
+                          ? Image.network(
+                              achievement.imageUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, e, s) =>
+                                  _buildAchievementImagePlaceholder(),
+                            )
+                          : _buildAchievementImagePlaceholder(),
                     ),
-                    onSelected: (value) {
-                      if (value == 'disable') {
-                        _toggleRequirementEnabled(requirement, false);
-                      }
-                      if (value == 'enable') {
-                        _toggleRequirementEnabled(requirement, true);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem<String>(
-                        value: requirement.isEnabled ? 'disable' : 'enable',
-                        child: Text(
-                          requirement.isEnabled
-                              ? 'Niet gebruiken in progressie'
-                              : 'Opnieuw gebruiken in progressie',
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        achievement.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                          color: isDisabled
+                              ? AppTheme.gray300
+                              : AppTheme.black,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              );
-            }).toList(),
+              ),
+            ),
           ),
-      ],
+          GestureDetector(
+            onTap: () => _toggleAchievementEnabled(
+              achievement.rawgId,
+              !achievement.isEnabled,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementImagePlaceholder() {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Icon(
+        LucideIcons.trophy,
+        size: 18,
+        color: AppTheme.orange300,
+      ),
     );
   }
 }

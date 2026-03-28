@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../features/collection/domain/collection_item.dart';
+import '../../features/discover/domain/rawg_game.dart';
 
 import "package:flutter/foundation.dart";
 
@@ -22,7 +23,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -45,9 +46,20 @@ CREATE TABLE collection (
   selectedCustomTags TEXT NOT NULL DEFAULT '[]',
   notes TEXT NOT NULL DEFAULT '',
   playtimeEntries TEXT NOT NULL DEFAULT '[]',
-  requirements TEXT NOT NULL DEFAULT '[]',
-  isManuallyCompleted INTEGER NOT NULL DEFAULT 0,
+  achievementStates TEXT NOT NULL DEFAULT '[]',
   addedAt TEXT NOT NULL
+)
+''');
+    await db.execute('''
+CREATE TABLE game_achievements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  apiId INTEGER NOT NULL,
+  rawgId INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  imageUrl TEXT,
+  percent REAL,
+  UNIQUE(apiId, rawgId)
 )
 ''');
   }
@@ -85,6 +97,24 @@ CREATE TABLE collection (
       await db.execute(
         "ALTER TABLE collection ADD COLUMN selectedCustomTags TEXT NOT NULL DEFAULT '[]'",
       );
+    }
+
+    if (oldVersion < 5) {
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN achievementStates TEXT NOT NULL DEFAULT '[]'",
+      );
+      await db.execute('''
+CREATE TABLE IF NOT EXISTS game_achievements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  apiId INTEGER NOT NULL,
+  rawgId INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  imageUrl TEXT,
+  percent REAL,
+  UNIQUE(apiId, rawgId)
+)
+''');
     }
   }
 
@@ -131,13 +161,41 @@ CREATE TABLE collection (
 
   Future<void> deleteCollectionItem(int id) async {
     final db = await instance.database;
-    await db.delete("collection", where: "id = ?", whereArgs: [id]);
+    // Look up the apiId before deleting so we can clean up achievements if needed.
+    final rows = await db.query(
+      'collection',
+      columns: ['apiId'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    await db.delete('collection', where: 'id = ?', whereArgs: [id]);
+    if (rows.isNotEmpty) {
+      final apiId = rows.first['apiId'] as int;
+      final remaining = await db.rawQuery(
+        'SELECT COUNT(*) AS total FROM collection WHERE apiId = ?',
+        [apiId],
+      );
+      final count = remaining.first['total'] as int? ?? 0;
+      if (count == 0) {
+        await db.delete(
+          'game_achievements',
+          where: 'apiId = ?',
+          whereArgs: [apiId],
+        );
+      }
+    }
     notifyListeners();
   }
 
   Future<void> deleteCollectionItemsByApiId(int apiId) async {
     final db = await instance.database;
     await db.delete('collection', where: 'apiId = ?', whereArgs: [apiId]);
+    await db.delete(
+      'game_achievements',
+      where: 'apiId = ?',
+      whereArgs: [apiId],
+    );
     notifyListeners();
   }
 
@@ -160,5 +218,81 @@ CREATE TABLE collection (
       limit: 1,
     );
     return result.isNotEmpty;
+  }
+
+  // ── Achievement DAO ──────────────────────────────────────────────────────
+
+  Future<bool> hasAchievementsForGame(int apiId) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'game_achievements',
+      where: 'apiId = ?',
+      whereArgs: [apiId],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<void> insertAchievementsForGame(
+    int apiId,
+    List<RawgAchievement> achievements,
+  ) async {
+    if (achievements.isEmpty) return;
+    final db = await instance.database;
+    final batch = db.batch();
+    for (final a in achievements) {
+      batch.insert(
+        'game_achievements',
+        {
+          'apiId': apiId,
+          'rawgId': a.id,
+          'name': a.name,
+          'description': a.description,
+          'imageUrl': a.imageUrl,
+          'percent': a.percent,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<Map<String, dynamic>>> getRawAchievementsForGame(
+    int apiId,
+  ) async {
+    final db = await instance.database;
+    return db.query(
+      'game_achievements',
+      where: 'apiId = ?',
+      whereArgs: [apiId],
+      orderBy: 'name ASC',
+    );
+  }
+
+  Future<List<GameAchievementWithState>> getAchievementsWithStates(
+    int apiId,
+    List<AchievementState> states,
+  ) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'game_achievements',
+      where: 'apiId = ?',
+      whereArgs: [apiId],
+      orderBy: 'name ASC',
+    );
+    final stateMap = {for (final s in states) s.rawgId: s};
+    return rows.map((row) {
+      final rawgId = row['rawgId'] as int;
+      final state = stateMap[rawgId];
+      return GameAchievementWithState(
+        rawgId: rawgId,
+        name: row['name'] as String? ?? '',
+        description: row['description'] as String? ?? '',
+        imageUrl: row['imageUrl'] as String?,
+        percent: (row['percent'] as num?)?.toDouble(),
+        isCompleted: state?.isCompleted ?? false,
+        isEnabled: state?.isEnabled ?? true,
+      );
+    }).toList(growable: false);
   }
 }

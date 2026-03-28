@@ -18,60 +18,82 @@ class PlaytimeEntry {
   }
 }
 
-class GameRequirement {
-  const GameRequirement({
-    required this.id,
-    required this.title,
-    required this.description,
+class AchievementState {
+  const AchievementState({
+    required this.rawgId,
     required this.isCompleted,
-    required this.isCustom,
     required this.isEnabled,
   });
 
-  final String id;
-  final String title;
-  final String description;
+  final int rawgId;
   final bool isCompleted;
-  final bool isCustom;
   final bool isEnabled;
 
-  GameRequirement copyWith({
-    String? id,
-    String? title,
-    String? description,
+  AchievementState copyWith({
+    int? rawgId,
     bool? isCompleted,
-    bool? isCustom,
     bool? isEnabled,
   }) {
-    return GameRequirement(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
+    return AchievementState(
+      rawgId: rawgId ?? this.rawgId,
       isCompleted: isCompleted ?? this.isCompleted,
-      isCustom: isCustom ?? this.isCustom,
       isEnabled: isEnabled ?? this.isEnabled,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'title': title,
-      'description': description,
+      'rawgId': rawgId,
       'isCompleted': isCompleted,
-      'isCustom': isCustom,
       'isEnabled': isEnabled,
     };
   }
 
-  factory GameRequirement.fromMap(Map<String, dynamic> map) {
-    return GameRequirement(
-      id: map['id'] as String? ?? '',
-      title: map['title'] as String? ?? '',
-      description: map['description'] as String? ?? '',
+  factory AchievementState.fromMap(Map<String, dynamic> map) {
+    return AchievementState(
+      rawgId: map['rawgId'] as int? ?? 0,
       isCompleted: map['isCompleted'] as bool? ?? false,
-      isCustom: map['isCustom'] as bool? ?? false,
       isEnabled: map['isEnabled'] as bool? ?? true,
+    );
+  }
+}
+
+class GameAchievementWithState {
+  const GameAchievementWithState({
+    required this.rawgId,
+    required this.name,
+    required this.description,
+    this.imageUrl,
+    this.percent,
+    required this.isCompleted,
+    required this.isEnabled,
+  });
+
+  final int rawgId;
+  final String name;
+  final String description;
+  final String? imageUrl;
+  final double? percent;
+  final bool isCompleted;
+  final bool isEnabled;
+
+  GameAchievementWithState copyWith({
+    int? rawgId,
+    String? name,
+    String? description,
+    String? imageUrl,
+    double? percent,
+    bool? isCompleted,
+    bool? isEnabled,
+  }) {
+    return GameAchievementWithState(
+      rawgId: rawgId ?? this.rawgId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      imageUrl: imageUrl ?? this.imageUrl,
+      percent: percent ?? this.percent,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isEnabled: isEnabled ?? this.isEnabled,
     );
   }
 }
@@ -90,8 +112,7 @@ class CollectionItem {
   final List<String> selectedCustomTags;
   final String notes;
   final List<PlaytimeEntry> playtimeEntries;
-  final List<GameRequirement> requirements;
-  final bool isManuallyCompleted;
+  final List<AchievementState> achievementStates;
   final DateTime addedAt;
 
   CollectionItem({
@@ -108,8 +129,7 @@ class CollectionItem {
     List<String>? selectedCustomTags,
     required this.notes,
     List<PlaytimeEntry>? playtimeEntries,
-    List<GameRequirement>? requirements,
-    required this.isManuallyCompleted,
+    List<AchievementState>? achievementStates,
     required this.addedAt,
   }) : selectedPlatforms = List<String>.from(selectedPlatforms ?? const []),
        suggestedTags = List<String>.from(suggestedTags ?? const []),
@@ -119,7 +139,9 @@ class CollectionItem {
        customTags = List<String>.from(customTags ?? const []),
        selectedCustomTags = List<String>.from(selectedCustomTags ?? const []),
        playtimeEntries = List<PlaytimeEntry>.from(playtimeEntries ?? const []),
-       requirements = List<GameRequirement>.from(requirements ?? const []);
+       achievementStates = List<AchievementState>.from(
+         achievementStates ?? const [],
+       );
 
   CollectionItem copyWith({
     int? id,
@@ -135,8 +157,7 @@ class CollectionItem {
     List<String>? selectedCustomTags,
     String? notes,
     List<PlaytimeEntry>? playtimeEntries,
-    List<GameRequirement>? requirements,
-    bool? isManuallyCompleted,
+    List<AchievementState>? achievementStates,
     DateTime? addedAt,
   }) {
     return CollectionItem(
@@ -154,8 +175,7 @@ class CollectionItem {
       selectedCustomTags: selectedCustomTags ?? this.selectedCustomTags,
       notes: notes ?? this.notes,
       playtimeEntries: playtimeEntries ?? this.playtimeEntries,
-      requirements: requirements ?? this.requirements,
-      isManuallyCompleted: isManuallyCompleted ?? this.isManuallyCompleted,
+      achievementStates: achievementStates ?? this.achievementStates,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -167,21 +187,10 @@ class CollectionItem {
     }.toList(growable: false);
   }
 
-  List<GameRequirement> get enabledRequirements {
-    return requirements.where((r) => r.isEnabled).toList(growable: false);
-  }
-
-  int get completedEnabledRequirementsCount {
-    return enabledRequirements.where((r) => r.isCompleted).length;
-  }
-
   double get progressRatio {
-    final enabled = enabledRequirements;
-    if (enabled.isEmpty) {
-      return isManuallyCompleted ? 1 : 0;
-    }
-    final completed = enabled.where((r) => r.isCompleted).length;
-    return completed / enabled.length;
+    final enabled = achievementStates.where((s) => s.isEnabled).toList();
+    if (enabled.isEmpty) return 0;
+    return enabled.where((s) => s.isCompleted).length / enabled.length;
   }
 
   int get totalPlaytimeMinutes {
@@ -206,8 +215,9 @@ class CollectionItem {
       'playtimeEntries': jsonEncode(
         playtimeEntries.map((e) => e.toMap()).toList(),
       ),
-      'requirements': jsonEncode(requirements.map((e) => e.toMap()).toList()),
-      'isManuallyCompleted': isManuallyCompleted ? 1 : 0,
+      'achievementStates': jsonEncode(
+        achievementStates.map((s) => s.toMap()).toList(),
+      ),
       'addedAt': addedAt.toIso8601String(),
     };
   }
@@ -247,22 +257,22 @@ class CollectionItem {
       }
     }
 
-    List<GameRequirement> parseRequirements(dynamic value) {
+    List<AchievementState> parseAchievementStates(dynamic value) {
       if (value is! String || value.isEmpty) {
-        return const <GameRequirement>[];
+        return const <AchievementState>[];
       }
       try {
         final decoded = jsonDecode(value);
         if (decoded is! List<dynamic>) {
-          return const <GameRequirement>[];
+          return const <AchievementState>[];
         }
         return decoded
             .whereType<Map>()
             .map((raw) => Map<String, dynamic>.from(raw))
-            .map(GameRequirement.fromMap)
+            .map(AchievementState.fromMap)
             .toList(growable: false);
       } catch (_) {
-        return const <GameRequirement>[];
+        return const <AchievementState>[];
       }
     }
 
@@ -274,11 +284,11 @@ class CollectionItem {
 
     return CollectionItem(
       id: map['id'] as int?,
-      apiId: map['apiId'] as int,
-      title: map['title'] as String,
+      apiId: map['apiId'] as int? ?? 0,
+      title: map['title'] as String? ?? 'Onbekende game',
       coverUrl: map['coverUrl'] as String?,
       publisher: map['publisher'] as String?,
-      format: map['format'] as String,
+      format: map['format'] as String? ?? 'Fysiek',
       selectedPlatforms: parseStringList(map['selectedPlatforms']),
       suggestedTags: suggestedTags,
       selectedSuggestedTags: selectedSuggestedTags.isEmpty
@@ -298,8 +308,7 @@ class CollectionItem {
                 .toList(),
       notes: map['notes'] as String? ?? '',
       playtimeEntries: parsePlaytimeEntries(map['playtimeEntries']),
-      requirements: parseRequirements(map['requirements']),
-      isManuallyCompleted: (map['isManuallyCompleted'] as int? ?? 0) == 1,
+      achievementStates: parseAchievementStates(map['achievementStates']),
       addedAt: DateTime.parse(map['addedAt'] as String),
     );
   }

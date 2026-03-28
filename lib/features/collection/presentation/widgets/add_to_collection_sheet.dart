@@ -41,6 +41,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
   final Set<String> _selectedPlatforms = {};
   List<String> _platformsToFormat = [];
   final Map<String, String> _platformFormats = {};
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -55,99 +56,139 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
     }
   }
 
-  void _saveToCollection() async {
-    final customizedPlatforms = _selectedPlatforms.map((p) {
-      final format = _platformFormats[p] ?? 'Fysiek';
-      return '$p ($format)';
-    }).toList();
+  Future<void> _saveToCollection() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
 
-    List<RawgAchievement> achievements = const [];
-    final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
-    if (rawgApiKey.isNotEmpty) {
-      final client = http.Client();
-      try {
-        achievements = await _rawgGamesApi.fetchGameAchievements(
-          client: client,
-          apiKey: rawgApiKey,
-          id: widget.game.id,
-        );
-      } catch (_) {
-        achievements = const [];
-      } finally {
-        client.close();
+    try {
+      final customizedPlatforms = _selectedPlatforms.map((p) {
+        final format = _platformFormats[p] ?? 'Fysiek';
+        return '$p ($format)';
+      }).toList();
+
+      List<AchievementState> initialStates = const [];
+      final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      if (rawgApiKey.isNotEmpty) {
+        final hasAchievements = await DatabaseHelper.instance
+            .hasAchievementsForGame(widget.game.id);
+        if (!hasAchievements) {
+          final client = http.Client();
+          try {
+            final achievements = await _rawgGamesApi.fetchGameAchievements(
+              client: client,
+              apiKey: rawgApiKey,
+              id: widget.game.id,
+            );
+            debugPrint(
+              '[GameCollect] Achievements opgehaald voor game ${widget.game.id}: ${achievements.length} stuks',
+            );
+            await DatabaseHelper.instance.insertAchievementsForGame(
+              widget.game.id,
+              achievements,
+            );
+            initialStates = achievements
+                .map(
+                  (a) => AchievementState(
+                    rawgId: a.id,
+                    isCompleted: false,
+                    isEnabled: true,
+                  ),
+                )
+                .toList(growable: false);
+          } catch (e, st) {
+            debugPrint('[GameCollect] Achievements ophalen mislukt: $e\n$st');
+            initialStates = const [];
+          } finally {
+            client.close();
+          }
+        } else {
+          final rawRows = await DatabaseHelper.instance
+              .getRawAchievementsForGame(widget.game.id);
+          initialStates = rawRows
+              .map(
+                (row) => AchievementState(
+                  rawgId: row['rawgId'] as int,
+                  isCompleted: false,
+                  isEnabled: true,
+                ),
+              )
+              .toList(growable: false);
+        }
+      } else {
+        debugPrint('[GameCollect] RAWG_API_KEY is leeg — achievements overgeslagen.');
       }
-    }
 
-    final requirements = achievements
-        .map(
-          (achievement) => GameRequirement(
-            id: 'rawg_${achievement.id}',
-            title: achievement.name,
-            description: achievement.description,
-            isCompleted: false,
-            isCustom: false,
-            isEnabled: true,
-          ),
-        )
-        .toList(growable: false);
+      for (final platformWithFormat in customizedPlatforms) {
+        final formatMatch =
+            RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+        final format = formatMatch?.group(1) ?? 'Fysiek & Digitaal';
 
-    for (final platformWithFormat in customizedPlatforms) {
-      final formatMatch = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
-      final format = formatMatch?.group(1) ?? 'Fysiek & Digitaal';
-
-      final item = CollectionItem(
-        apiId: widget.game.id,
-        title: widget.game.title,
-        coverUrl: widget.game.coverUrl,
-        publisher: widget.game.publishers.isNotEmpty
-            ? widget.game.publishers.first
-            : null,
-        format: format,
-        selectedPlatforms: [platformWithFormat],
-        suggestedTags: widget.game.tags.take(12).toList(),
-        selectedSuggestedTags: const [],
-        customTags: const [],
-        selectedCustomTags: const [],
-        notes: '',
-        playtimeEntries: const [],
-        requirements: requirements,
-        isManuallyCompleted: false,
-        addedAt: DateTime.now(),
-      );
-
-      await DatabaseHelper.instance.insertCollectionItem(item);
-    }
-
-    if (mounted) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Toegevoegd aan collectie!')),
+        final item = CollectionItem(
+          apiId: widget.game.id,
+          title: widget.game.title,
+          coverUrl: widget.game.coverUrl,
+          publisher: widget.game.publishers.isNotEmpty
+              ? widget.game.publishers.first
+              : null,
+          format: format,
+          selectedPlatforms: [platformWithFormat],
+          suggestedTags: widget.game.tags.take(12).toList(),
+          selectedSuggestedTags: const [],
+          customTags: const [],
+          selectedCustomTags: const [],
+          notes: '',
+          playtimeEntries: const [],
+          achievementStates: initialStates,
+          addedAt: DateTime.now(),
         );
+
+        await DatabaseHelper.instance.insertCollectionItem(item);
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Toegevoegd aan collectie!')),
+          );
+      }
+    } catch (e, st) {
+      debugPrint('[GameCollect] Opslaan mislukt: $e\n$st');
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Er is iets misgegaan bij het opslaan.')),
+          );
+      }
     }
   }
 
   void _nextStep() {
-    setState(() {
-      if (_currentStep == 0) {
-        if (_selectedPlatforms.isEmpty) {
-          ScaffoldMessenger.of(context)
-            ..removeCurrentSnackBar()
-            ..showSnackBar(
-              const SnackBar(content: Text('Selecteer minstens één platform')),
-            );
-          return;
-        }
+    if (_isSaving) return;
+    if (_currentStep == 0) {
+      if (_selectedPlatforms.isEmpty) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Selecteer minstens één platform')),
+          );
+        return;
+      }
+      setState(() {
         _platformsToFormat = _selectedPlatforms.toList();
-      }
-
-      if (_currentStep >= _platformsToFormat.length) {
-        _saveToCollection();
-      } else {
         _currentStep++;
-      }
-    });
+      });
+      return;
+    }
+
+    if (_currentStep >= _platformsToFormat.length) {
+      _saveToCollection();
+    } else {
+      setState(() => _currentStep++);
+    }
   }
 
   void _previousStep() {
@@ -216,22 +257,8 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
           }).toList(),
         ),
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: _selectedPlatforms.isEmpty ? null : _nextStep,
-          icon: Icon(
-            _platformsToFormat.isNotEmpty &&
-                    _currentStep >= _platformsToFormat.length
-                ? LucideIcons.save
-                : LucideIcons.arrowRight,
-            size: 20,
-          ),
-          label: Text(
-            _platformsToFormat.isNotEmpty &&
-                    _currentStep >= _platformsToFormat.length
-                ? 'Opslaan in collectie'
-                : 'Volgende',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+        ElevatedButton(
+          onPressed: (_selectedPlatforms.isEmpty || _isSaving) ? null : _nextStep,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.orange500,
             foregroundColor: AppTheme.white,
@@ -241,6 +268,15 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.arrowRight, size: 20),
+              SizedBox(width: 8),
+              Text('Volgende', style: TextStyle(fontWeight: FontWeight.w700)),
+            ],
           ),
         ),
       ],
@@ -320,24 +356,42 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
           }).toList(),
         ),
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: _nextStep,
-          icon: Icon(
-            isLastStep ? LucideIcons.save : LucideIcons.arrowRight,
-            size: 20,
-          ),
-          label: Text(
-            isLastStep ? 'Opslaan in collectie' : 'Volgende',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _nextStep,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.orange500,
             foregroundColor: AppTheme.white,
+            disabledBackgroundColor: AppTheme.orange500.withValues(alpha: 0.6),
+            disabledForegroundColor: AppTheme.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
           ),
+          child: isLastStep && _isSaving
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppTheme.white,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isLastStep ? LucideIcons.save : LucideIcons.arrowRight,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isLastStep ? 'Opslaan in collectie' : 'Volgende',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
         ),
       ],
     );
@@ -347,37 +401,39 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Toevoegen aan collectie',
-                style: textTheme.titleLarge?.copyWith(
-                  color: AppTheme.black,
-                  fontWeight: FontWeight.w700,
+    return PopScope(
+      canPop: !_isSaving,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Toevoegen aan collectie',
+                  style: textTheme.titleLarge?.copyWith(
+                    color: AppTheme.black,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(LucideIcons.x, color: AppTheme.black),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _currentStep == 0
-                ? _buildPlatformSelection(textTheme)
-                : _buildFormatSelection(textTheme),
-          ),
-        ],
+                IconButton(
+                  icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _currentStep == 0
+                  ? _buildPlatformSelection(textTheme)
+                  : _buildFormatSelection(textTheme),
+            ),
+          ],
+        ),
       ),
     );
   }

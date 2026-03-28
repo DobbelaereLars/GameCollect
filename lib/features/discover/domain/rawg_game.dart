@@ -112,12 +112,14 @@ class RawgAchievement {
     required this.id,
     required this.name,
     required this.description,
+    this.imageUrl,
     required this.percent,
   });
 
   final int id;
   final String name;
   final String description;
+  final String? imageUrl;
   final double? percent;
 
   factory RawgAchievement.fromJson(Map<String, dynamic> json) {
@@ -125,7 +127,12 @@ class RawgAchievement {
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? 'Onbekende achievement',
       description: json['description'] as String? ?? '',
-      percent: (json['percent'] as num?)?.toDouble(),
+      imageUrl: json['image'] as String?,
+      percent: switch (json['percent']) {
+        final num n => n.toDouble(),
+        final String s => double.tryParse(s),
+        _ => null,
+      },
     );
   }
 }
