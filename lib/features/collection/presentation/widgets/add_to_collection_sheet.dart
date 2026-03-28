@@ -115,12 +115,15 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
               .toList(growable: false);
         }
       } else {
-        debugPrint('[GameCollect] RAWG_API_KEY is leeg — achievements overgeslagen.');
+        debugPrint(
+          '[GameCollect] RAWG_API_KEY is leeg — achievements overgeslagen.',
+        );
       }
 
       for (final platformWithFormat in customizedPlatforms) {
-        final formatMatch =
-            RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+        final formatMatch = RegExp(
+          r'\((.*?)\)$',
+        ).firstMatch(platformWithFormat);
         final format = formatMatch?.group(1) ?? 'Fysiek & Digitaal';
 
         final item = CollectionItem(
@@ -160,7 +163,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
         ScaffoldMessenger.of(context)
           ..removeCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(content: Text('Er is iets misgegaan bij het opslaan.')),
+            const SnackBar(
+              content: Text('Er is iets misgegaan bij het opslaan.'),
+            ),
           );
       }
     }
@@ -258,7 +263,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
         ),
         const SizedBox(height: 32),
         ElevatedButton(
-          onPressed: (_selectedPlatforms.isEmpty || _isSaving) ? null : _nextStep,
+          onPressed: (_selectedPlatforms.isEmpty || _isSaving)
+              ? null
+              : _nextStep,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.orange500,
             foregroundColor: AppTheme.white,
@@ -421,7 +428,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
                 ),
                 IconButton(
                   icon: const Icon(LucideIcons.x, color: AppTheme.black),
-                  onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isSaving
+                      ? null
+                      : () => Navigator.of(context).pop(),
                 ),
               ],
             ),

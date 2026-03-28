@@ -92,9 +92,7 @@ class RawgGamesApi {
       final results = decoded['results'] as List<dynamic>? ?? const [];
 
       all.addAll(
-        results
-            .whereType<Map<String, dynamic>>()
-            .map(RawgAchievement.fromJson),
+        results.whereType<Map<String, dynamic>>().map(RawgAchievement.fromJson),
       );
 
       nextUrl = decoded['next'] as String?;

@@ -29,11 +29,7 @@ class AchievementState {
   final bool isCompleted;
   final bool isEnabled;
 
-  AchievementState copyWith({
-    int? rawgId,
-    bool? isCompleted,
-    bool? isEnabled,
-  }) {
+  AchievementState copyWith({int? rawgId, bool? isCompleted, bool? isEnabled}) {
     return AchievementState(
       rawgId: rawgId ?? this.rawgId,
       isCompleted: isCompleted ?? this.isCompleted,

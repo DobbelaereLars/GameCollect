@@ -788,9 +788,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.gray700,
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
               child: const Text('Sluiten'),
             ),
           ],
@@ -1492,7 +1490,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-    Widget _buildAchievementTile(GameAchievementWithState achievement) {
+  Widget _buildAchievementTile(GameAchievementWithState achievement) {
     final isDisabled = !achievement.isEnabled;
 
     return Padding(
@@ -1552,9 +1550,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                           fontSize: 15,
                           fontWeight: FontWeight.w400,
                           height: 1.4,
-                          color: isDisabled
-                              ? AppTheme.gray300
-                              : AppTheme.black,
+                          color: isDisabled ? AppTheme.gray300 : AppTheme.black,
                         ),
                       ),
                     ),

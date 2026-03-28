@@ -241,18 +241,14 @@ CREATE TABLE IF NOT EXISTS game_achievements (
     final db = await instance.database;
     final batch = db.batch();
     for (final a in achievements) {
-      batch.insert(
-        'game_achievements',
-        {
-          'apiId': apiId,
-          'rawgId': a.id,
-          'name': a.name,
-          'description': a.description,
-          'imageUrl': a.imageUrl,
-          'percent': a.percent,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      batch.insert('game_achievements', {
+        'apiId': apiId,
+        'rawgId': a.id,
+        'name': a.name,
+        'description': a.description,
+        'imageUrl': a.imageUrl,
+        'percent': a.percent,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
   }
@@ -281,18 +277,20 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       orderBy: 'name ASC',
     );
     final stateMap = {for (final s in states) s.rawgId: s};
-    return rows.map((row) {
-      final rawgId = row['rawgId'] as int;
-      final state = stateMap[rawgId];
-      return GameAchievementWithState(
-        rawgId: rawgId,
-        name: row['name'] as String? ?? '',
-        description: row['description'] as String? ?? '',
-        imageUrl: row['imageUrl'] as String?,
-        percent: (row['percent'] as num?)?.toDouble(),
-        isCompleted: state?.isCompleted ?? false,
-        isEnabled: state?.isEnabled ?? true,
-      );
-    }).toList(growable: false);
+    return rows
+        .map((row) {
+          final rawgId = row['rawgId'] as int;
+          final state = stateMap[rawgId];
+          return GameAchievementWithState(
+            rawgId: rawgId,
+            name: row['name'] as String? ?? '',
+            description: row['description'] as String? ?? '',
+            imageUrl: row['imageUrl'] as String?,
+            percent: (row['percent'] as num?)?.toDouble(),
+            isCompleted: state?.isCompleted ?? false,
+            isEnabled: state?.isEnabled ?? true,
+          );
+        })
+        .toList(growable: false);
   }
 }

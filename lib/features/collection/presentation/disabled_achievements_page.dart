@@ -40,7 +40,11 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
         color: AppTheme.orange50,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Icon(LucideIcons.trophy, size: 18, color: AppTheme.orange300),
+      child: const Icon(
+        LucideIcons.trophy,
+        size: 18,
+        color: AppTheme.orange300,
+      ),
     );
   }
 
@@ -75,11 +79,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
-                    Icon(
-                      LucideIcons.eye,
-                      size: 48,
-                      color: AppTheme.gray300,
-                    ),
+                    Icon(LucideIcons.eye, size: 48, color: AppTheme.gray300),
                     SizedBox(height: 16),
                     Text(
                       'Geen verborgen achievements.\nAchievements die je niet wil meetellen in je progressie vind je hier terug.',
@@ -99,10 +99,8 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
           : ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               itemCount: _achievements.length,
-              separatorBuilder: (_, _) => const Divider(
-                height: 1,
-                color: AppTheme.gray100,
-              ),
+              separatorBuilder: (_, _) =>
+                  const Divider(height: 1, color: AppTheme.gray100),
               itemBuilder: (context, index) {
                 final achievement = _achievements[index];
                 return Padding(
@@ -130,7 +128,8 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                           },
                           activeColor: AppTheme.orange500,
                           side: const BorderSide(color: AppTheme.gray300),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -166,7 +165,10 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                       // Re-enable button
                       GestureDetector(
                         onTap: () async {
-                          await widget.onToggleEnabled(achievement.rawgId, true);
+                          await widget.onToggleEnabled(
+                            achievement.rawgId,
+                            true,
+                          );
                           if (!mounted) return;
                           setState(() => _achievements.removeAt(index));
                         },
