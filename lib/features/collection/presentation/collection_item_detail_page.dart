@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
+import 'notes_page.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
   const CollectionItemDetailPage({
@@ -27,7 +28,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   static const int _maxActiveTags = 10;
   static const int _maxCustomTagLength = 15;
 
-  final TextEditingController _notesController = TextEditingController();
   final TextEditingController _hoursController = TextEditingController();
   final TextEditingController _minutesController = TextEditingController();
   final TextEditingController _requirementTitleController =
@@ -35,7 +35,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
 
   CollectionItem? _item;
   bool _isLoading = true;
-  bool _isSavingNotes = false;
   bool _showDisabledRequirements = false;
   bool _hasOpenedTagsOnStart = false;
 
@@ -79,7 +78,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
 
   @override
   void dispose() {
-    _notesController.dispose();
     _hoursController.dispose();
     _minutesController.dispose();
     _requirementTitleController.dispose();
@@ -102,8 +100,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       Navigator.of(context).pop();
       return;
     }
-
-    _notesController.text = item.notes;
 
     setState(() {
       _item = item;
@@ -142,7 +138,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     final customTags = List<String>.from(item.customTags);
     final selectedCustomTags = Set<String>.from(item.selectedCustomTags);
     final customTagController = TextEditingController();
-    final sheetScrollController = ScrollController();
 
     int activeTagCount() {
       return selectedSuggestedTags.length + selectedCustomTags.length;
@@ -173,23 +168,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         return;
       }
 
-      final previousOffset = sheetScrollController.hasClients
-          ? sheetScrollController.offset
-          : 0.0;
-
       setSheetState(() {
         customTags.add(value);
         selectedCustomTags.add(value);
         customTagController.clear();
-      });
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!sheetScrollController.hasClients) {
-          return;
-        }
-        final maxOffset = sheetScrollController.position.maxScrollExtent;
-        final targetOffset = previousOffset.clamp(0.0, maxOffset);
-        sheetScrollController.jumpTo(targetOffset);
       });
     }
 
@@ -220,7 +202,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 MediaQuery.of(sheetContext).viewInsets.bottom + 40,
               ),
               child: SingleChildScrollView(
-                controller: sheetScrollController,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Column(
@@ -546,29 +527,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  Future<void> _saveNotes() async {
-    final item = _item;
-    if (item == null) return;
-
-    setState(() {
-      _isSavingNotes = true;
-    });
-
-    await _persistItem(item.copyWith(notes: _notesController.text.trim()));
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isSavingNotes = false;
-    });
-
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Notities opgeslagen.')));
-  }
-
   Future<void> _addPlaytime() async {
     final item = _item;
     if (item == null) return;
@@ -722,52 +680,106 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           ),
         ),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(item),
-              const SizedBox(height: 12),
-              _buildSection(title: 'Notities', child: _buildNotesSection()),
-              const SizedBox(height: 12),
-              _buildSection(
-                title: 'Speeltijd',
-                child: _buildPlaytimeSection(item),
-              ),
-              const SizedBox(height: 12),
-              _buildSection(
-                title: 'Progressie',
-                trailing: PopupMenuButton<String>(
-                  icon: const Icon(
-                    LucideIcons.ellipsisVertical,
-                    color: AppTheme.gray700,
-                    size: 18,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'toggle_disabled') {
-                      setState(() {
-                        _showDisabledRequirements = !_showDisabledRequirements;
-                      });
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'toggle_disabled',
-                      child: Text(
-                        _showDisabledRequirements
-                            ? 'Verberg niet-gebruikte achievements'
-                            : 'Toon niet-gebruikte achievements',
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(item),
+                    const SizedBox(height: 12),
+                    _buildSection(
+                      title: 'Speeltijd',
+                      child: _buildPlaytimeSection(item),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildSection(
+                      title: 'Progressie',
+                      trailing: PopupMenuButton<String>(
+                        icon: const Icon(
+                          LucideIcons.ellipsisVertical,
+                          color: AppTheme.gray700,
+                          size: 18,
+                        ),
+                        onSelected: (value) {
+                          if (value == 'toggle_disabled') {
+                            setState(() {
+                              _showDisabledRequirements =
+                                  !_showDisabledRequirements;
+                            });
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'toggle_disabled',
+                            child: Text(
+                              _showDisabledRequirements
+                                  ? 'Verberg niet-gebruikte achievements'
+                                  : 'Toon niet-gebruikte achievements',
+                            ),
+                          ),
+                        ],
                       ),
+                      child: _buildProgressSection(item, progressText),
                     ),
                   ],
                 ),
-                child: _buildProgressSection(item, progressText),
               ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            right: 16,
+            bottom: MediaQuery.of(context).padding.bottom + 16,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () async {
+                    final current = _item;
+                    if (current?.id == null) return;
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => NotesPage(
+                          itemId: current!.id!,
+                          initialNotes: current.notes,
+                        ),
+                      ),
+                    );
+                    final refreshed = await DatabaseHelper.instance
+                        .getCollectionItemById(widget.itemId);
+                    if (mounted && refreshed != null) {
+                      setState(() => _item = refreshed);
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Icon(
+                      LucideIcons.pencilLine,
+                      size: 22,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1047,37 +1059,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           child,
         ],
       ),
-    );
-  }
-
-  Widget _buildNotesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _notesController,
-          cursorColor: AppTheme.orange600,
-          style: const TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
-          maxLines: 4,
-          decoration: _orangeInputDecoration(
-            hintText: 'Voeg notities toe over je playthrough, builds, tips...',
-          ),
-        ),
-        const SizedBox(height: 10),
-        ElevatedButton(
-          onPressed: _isSavingNotes ? null : _saveNotes,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.orange500,
-            foregroundColor: AppTheme.white,
-            disabledBackgroundColor: AppTheme.orange100,
-            disabledForegroundColor: AppTheme.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: Text(_isSavingNotes ? 'Opslaan...' : 'Notities opslaan'),
-        ),
-      ],
     );
   }
 
