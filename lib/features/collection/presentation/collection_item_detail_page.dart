@@ -1072,16 +1072,28 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                     _buildHeader(item),
                     if (_achievements.isNotEmpty) ...[
                       const SizedBox(height: 24),
-                      const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                      const Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppTheme.gray100,
+                      ),
                       const SizedBox(height: 24),
                       _buildAchievementsSection(),
                     ],
                     const SizedBox(height: 24),
-                    const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.gray100,
+                    ),
                     const SizedBox(height: 24),
                     _buildRequirementsSection(),
                     const SizedBox(height: 24),
-                    const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.gray100,
+                    ),
                     const SizedBox(height: 24),
                     _buildPlaytimeSummaryTile(item),
                     const SizedBox(height: 8),
@@ -1394,8 +1406,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             ),
           ),
         );
-        final refreshed = await DatabaseHelper.instance
-            .getCollectionItemById(widget.itemId);
+        final refreshed = await DatabaseHelper.instance.getCollectionItemById(
+          widget.itemId,
+        );
         if (mounted && refreshed != null) {
           setState(() => _item = refreshed);
         }

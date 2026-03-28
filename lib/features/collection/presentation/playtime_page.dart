@@ -53,8 +53,11 @@ class _PlaytimePageState extends State<PlaytimePage> {
 
   DateTime _mondayOfCurrentWeek() {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
   }
 
   int _weekOffsetForDate(String dateKey) {
@@ -119,8 +122,18 @@ class _PlaytimePageState extends State<PlaytimePage> {
     final start = days.first;
     final end = days.last;
     const months = [
-      'jan', 'feb', 'mrt', 'apr', 'mei', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+      'jan',
+      'feb',
+      'mrt',
+      'apr',
+      'mei',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'okt',
+      'nov',
+      'dec',
     ];
     if (start.month == end.month) {
       return '${start.day} – ${end.day} ${months[end.month - 1]}';
@@ -129,7 +142,13 @@ class _PlaytimePageState extends State<PlaytimePage> {
   }
 
   static const List<String> _dayLabels = [
-    'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo',
+    'Ma',
+    'Di',
+    'Wo',
+    'Do',
+    'Vr',
+    'Za',
+    'Zo',
   ];
 
   // ─── Save playtime ────────────────────────────────────────────────────────────
@@ -148,11 +167,13 @@ class _PlaytimePageState extends State<PlaytimePage> {
 
     final updated = [..._entries, newEntry];
 
-    final item = await DatabaseHelper.instance
-        .getCollectionItemById(widget.itemId);
+    final item = await DatabaseHelper.instance.getCollectionItemById(
+      widget.itemId,
+    );
     if (item == null) return;
-    await DatabaseHelper.instance
-        .updateCollectionItem(item.copyWith(playtimeEntries: updated));
+    await DatabaseHelper.instance.updateCollectionItem(
+      item.copyWith(playtimeEntries: updated),
+    );
 
     if (!mounted) return;
     setState(() {
@@ -224,14 +245,15 @@ class _PlaytimePageState extends State<PlaytimePage> {
         actions: [
           IconButton(
             onPressed: () async {
-              final updated = await Navigator.of(context).push<List<PlaytimeEntry>>(
-                MaterialPageRoute<List<PlaytimeEntry>>(
-                  builder: (_) => _PlaytimeHistoryPage(
-                    itemId: widget.itemId,
-                    initialEntries: _entries,
-                  ),
-                ),
-              );
+              final updated = await Navigator.of(context)
+                  .push<List<PlaytimeEntry>>(
+                    MaterialPageRoute<List<PlaytimeEntry>>(
+                      builder: (_) => _PlaytimeHistoryPage(
+                        itemId: widget.itemId,
+                        initialEntries: _entries,
+                      ),
+                    ),
+                  );
               if (updated != null && mounted) {
                 setState(() => _entries = updated);
               }
@@ -318,8 +340,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () =>
-                            setState(() => _weekOffset--),
+                        onPressed: () => setState(() => _weekOffset--),
                         icon: const Icon(
                           LucideIcons.chevronLeft,
                           size: 20,
@@ -433,8 +454,8 @@ class _PlaytimePageState extends State<PlaytimePage> {
                                     color: mins == 0
                                         ? AppTheme.gray100
                                         : (isToday
-                                            ? AppTheme.orange500
-                                            : AppTheme.orange300),
+                                              ? AppTheme.orange500
+                                              : AppTheme.orange300),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                 ),
@@ -604,7 +625,9 @@ class _PlaytimePageState extends State<PlaytimePage> {
                       style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 14,
-                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isActive
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                         color: isActive ? AppTheme.orange500 : AppTheme.black,
                       ),
                     ),
@@ -681,8 +704,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding =
-        MediaQuery.of(context).viewInsets.bottom + 40;
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom + 40;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(24, 24, 24, bottomPadding),
@@ -886,8 +908,18 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
   String _todayLabel() {
     final now = DateTime.now();
     const months = [
-      'jan', 'feb', 'mrt', 'apr', 'mei', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+      'jan',
+      'feb',
+      'mrt',
+      'apr',
+      'mei',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'okt',
+      'nov',
+      'dec',
     ];
     return '${now.day} ${months[now.month - 1]} ${now.year}';
   }
@@ -1011,7 +1043,9 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
     if (confirmed != true) return;
 
     final updated = _entries.where((e) => e.id != entry.id).toList();
-    final item = await DatabaseHelper.instance.getCollectionItemById(widget.itemId);
+    final item = await DatabaseHelper.instance.getCollectionItemById(
+      widget.itemId,
+    );
     if (item == null) return;
     await DatabaseHelper.instance.updateCollectionItem(
       item.copyWith(playtimeEntries: updated),
@@ -1087,10 +1121,18 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                               : BorderSide.none,
                         ),
                         borderRadius: BorderRadius.only(
-                          topLeft: isFirst ? const Radius.circular(16) : Radius.zero,
-                          topRight: isFirst ? const Radius.circular(16) : Radius.zero,
-                          bottomLeft: isLast ? const Radius.circular(16) : Radius.zero,
-                          bottomRight: isLast ? const Radius.circular(16) : Radius.zero,
+                          topLeft: isFirst
+                              ? const Radius.circular(16)
+                              : Radius.zero,
+                          topRight: isFirst
+                              ? const Radius.circular(16)
+                              : Radius.zero,
+                          bottomLeft: isLast
+                              ? const Radius.circular(16)
+                              : Radius.zero,
+                          bottomRight: isLast
+                              ? const Radius.circular(16)
+                              : Radius.zero,
                         ),
                       ),
                       child: Column(
@@ -1110,7 +1152,8 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _formatDateLabel(entry.date),
