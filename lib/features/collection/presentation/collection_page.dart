@@ -549,165 +549,174 @@ class _CollectionPageState extends State<CollectionPage> {
                 formatIcon = LucideIcons.layers;
               }
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                color: AppTheme.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppTheme.gray100),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: item.id == null
-                      ? null
-                      : () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  CollectionItemDetailPage(itemId: item.id!),
-                            ),
-                          );
-                        },
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Cover Image
-                      ClipRRect(
-                        borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(16),
-                        ),
-                        child: SizedBox(
-                          width: 100,
-                          height: 140, // consistent height
-                          child: item.coverUrl != null
-                              ? Image.network(
-                                  item.coverUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      _buildPlaceholder(),
-                                )
-                              : _buildPlaceholder(),
-                        ),
-                      ),
-                      // Meta Data
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: SizedBox(
-                            height: 140,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.black,
-                                        height: 1.2,
-                                      ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.orange50,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        formatIcon,
-                                        size: 12,
-                                        color: AppTheme.orange500,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        specificFormat,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: AppTheme.orange700,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                if (item.publisher != null &&
-                                    item.publisher!.isNotEmpty)
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        LucideIcons.building,
-                                        size: 14,
-                                        color: AppTheme.gray500,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          item.publisher!,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: AppTheme.gray500,
-                                                fontSize: 12,
-                                              ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                const SizedBox(height: 8),
-                                LinearProgressIndicator(
-                                  value: item.progressRatio,
-                                  minHeight: 6,
-                                  borderRadius: BorderRadius.circular(999),
-                                  backgroundColor: AppTheme.orange100,
-                                  valueColor:
-                                      const AlwaysStoppedAnimation<Color>(
-                                        AppTheme.orange500,
-                                      ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildCardTagsRow(item),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Action menu
-                      IconButton(
-                        icon: const Icon(
-                          LucideIcons.ellipsisVertical,
-                          size: 20,
-                          color: AppTheme.gray500,
-                        ),
-                        onPressed: () => _showItemOptions(
-                          item,
-                          specificPlatform: platform,
-                          specificPlatformWithFormat: platformString,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              return _buildCollectionCard(
+                context: context,
+                item: item,
+                specificFormat: specificFormat,
+                formatIcon: formatIcon,
+                platform: platform,
+                platformString: platformString,
               );
             }),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildCollectionCard({
+    required BuildContext context,
+    required CollectionItem item,
+    required String specificFormat,
+    required IconData formatIcon,
+    required String platform,
+    required String platformString,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: AppTheme.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppTheme.gray100),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: item.id == null
+            ? null
+            : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+                  ),
+                );
+              },
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cover image fills card height
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(16),
+                ),
+                child: SizedBox(
+                  width: 100,
+                  child: item.coverUrl != null
+                      ? Image.network(
+                          item.coverUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _buildPlaceholder(),
+                        )
+                      : _buildPlaceholder(),
+                ),
+              ),
+              // Meta data
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.black,
+                              height: 1.2,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.orange50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              formatIcon,
+                              size: 12,
+                              color: AppTheme.orange500,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              specificFormat,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: AppTheme.orange700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (item.publisher != null && item.publisher!.isNotEmpty)
+                        Row(
+                          children: [
+                            const Icon(
+                              LucideIcons.building,
+                              size: 14,
+                              color: AppTheme.gray500,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                item.publisher!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.gray500,
+                                      fontSize: 12,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: item.progressRatio,
+                        minHeight: 6,
+                        borderRadius: BorderRadius.circular(999),
+                        backgroundColor: AppTheme.orange100,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppTheme.orange500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildCardTagsRow(item),
+                    ],
+                  ),
+                ),
+              ),
+              // Action menu
+              IconButton(
+                icon: const Icon(
+                  LucideIcons.ellipsisVertical,
+                  size: 20,
+                  color: AppTheme.gray500,
+                ),
+                onPressed: () => _showItemOptions(
+                  item,
+                  specificPlatform: platform,
+                  specificPlatformWithFormat: platformString,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

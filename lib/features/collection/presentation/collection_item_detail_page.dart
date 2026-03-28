@@ -144,10 +144,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     final customTagController = TextEditingController();
     final sheetScrollController = ScrollController();
 
-    bool canSave() {
-      return selectedSuggestedTags.isNotEmpty || selectedCustomTags.isNotEmpty;
-    }
-
     int activeTagCount() {
       return selectedSuggestedTags.length + selectedCustomTags.length;
     }
@@ -387,9 +383,32 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                 fontFamily: 'Manrope',
                                 color: AppTheme.black,
                               ),
-                              decoration: _orangeInputDecoration(
-                                hintText: 'Typ je eigen tag (max 15)',
-                              ),
+                              decoration:
+                                  _orangeInputDecoration(
+                                    hintText: 'Typ je eigen tag',
+                                  ).copyWith(
+                                    suffix:
+                                        ValueListenableBuilder<
+                                          TextEditingValue
+                                        >(
+                                          valueListenable: customTagController,
+                                          builder: (context, value, child) {
+                                            final len = value.text.length;
+                                            return Text(
+                                              '$len/$_maxCustomTagLength',
+                                              style: TextStyle(
+                                                fontFamily: 'Manrope',
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    len == _maxCustomTagLength
+                                                    ? AppTheme.orange700
+                                                    : AppTheme.gray500,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                  ),
                               onSubmitted: (_) => addCustomTag(setSheetState),
                             ),
                           ),
@@ -480,8 +499,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                 step = 1;
                               });
                             }
-                          : canSave()
-                          ? () async {
+                          : () async {
                               final updated = item.copyWith(
                                 selectedSuggestedTags: selectedSuggestedTags
                                     .toList(growable: false),
@@ -498,8 +516,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                 return;
                               }
                               Navigator.of(sheetContext).pop();
-                            }
-                          : null,
+                            },
                       icon: Icon(
                         step == 0 ? LucideIcons.arrowRight : LucideIcons.save,
                         size: 20,
