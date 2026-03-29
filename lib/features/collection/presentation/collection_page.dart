@@ -878,14 +878,14 @@ class _CollectionPageState extends State<CollectionPage> {
 
     final hasMultipleGameEntries = sameGameCount > 1;
 
-    showModalBottomSheet(
+    await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       backgroundColor: AppTheme.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 24.0),
@@ -904,39 +904,46 @@ class _CollectionPageState extends State<CollectionPage> {
                     style: const TextStyle(color: Colors.red),
                   ),
                   onTap: () async {
-                    Navigator.of(context).pop();
-                    if (item.id != null) {
-                      final updatedPlatforms = List<String>.from(
-                        item.selectedPlatforms,
-                      )..remove(specificPlatformWithFormat);
+                    Navigator.of(sheetContext).pop();
+                    await _showDeleteConfirmSheet(
+                      title: '${item.title} verwijderen?',
+                      description: hasMultipleGameEntries
+                          ? 'De game wordt verwijderd van $specificPlatform. Al je voortgang, speelduur en instellingen voor dit platform gaan permanent verloren.'
+                          : 'De game wordt volledig verwijderd uit je collectie. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
+                      buttonLabel: 'Verwijderen',
+                      onConfirm: () async {
+                        if (item.id != null) {
+                          final updatedPlatforms = List<String>.from(
+                            item.selectedPlatforms,
+                          )..remove(specificPlatformWithFormat);
 
-                      if (updatedPlatforms.isEmpty) {
-                        await DatabaseHelper.instance.deleteCollectionItem(
-                          item.id!,
-                        );
-                      } else {
-                        // Create updated item with the platform removed
-                        final updatedItem = item.copyWith(
-                          selectedPlatforms: updatedPlatforms,
-                        );
-                        await DatabaseHelper.instance.updateCollectionItem(
-                          updatedItem,
-                        );
-                      }
-
-                      _loadCollection();
-                      if (mounted) {
-                        messenger
-                          ..removeCurrentSnackBar()
-                          ..showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '"${item.title}" verwijderd van $specificPlatform.',
+                          if (updatedPlatforms.isEmpty) {
+                            await DatabaseHelper.instance.deleteCollectionItem(
+                              item.id!,
+                            );
+                          } else {
+                            await DatabaseHelper.instance.updateCollectionItem(
+                              item.copyWith(
+                                selectedPlatforms: updatedPlatforms,
                               ),
-                            ),
-                          );
-                      }
-                    }
+                            );
+                          }
+
+                          _loadCollection();
+                          if (mounted) {
+                            messenger
+                              ..removeCurrentSnackBar()
+                              ..showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '"${item.title}" verwijderd van $specificPlatform.',
+                                  ),
+                                ),
+                              );
+                          }
+                        }
+                      },
+                    );
                   },
                 ),
                 if (hasMultipleGameEntries)
@@ -947,27 +954,117 @@ class _CollectionPageState extends State<CollectionPage> {
                       style: const TextStyle(color: Colors.red),
                     ),
                     onTap: () async {
-                      Navigator.of(context).pop();
-                      await DatabaseHelper.instance
-                          .deleteCollectionItemsByApiId(item.apiId);
-                      _loadCollection();
-                      if (mounted) {
-                        messenger
-                          ..removeCurrentSnackBar()
-                          ..showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '"${item.title}" volledig verwijderd uit je collectie.',
-                              ),
-                            ),
-                          );
-                      }
+                      Navigator.of(sheetContext).pop();
+                      await _showDeleteConfirmSheet(
+                        title: '${item.title} volledig verwijderen?',
+                        description:
+                            'De game wordt van elk platform verwijderd. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
+                        buttonLabel: 'Volledig verwijderen',
+                        onConfirm: () async {
+                          await DatabaseHelper.instance
+                              .deleteCollectionItemsByApiId(item.apiId);
+                          _loadCollection();
+                          if (mounted) {
+                            messenger
+                              ..removeCurrentSnackBar()
+                              ..showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '"${item.title}" volledig verwijderd uit je collectie.',
+                                  ),
+                                ),
+                              );
+                          }
+                        },
+                      );
                     },
                   ),
-                // Padding reduced to match other panels
                 const SizedBox(height: 16),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteConfirmSheet({
+    required String title,
+    required String description,
+    required String buttonLabel,
+    required Future<void> Function() onConfirm,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  await onConfirm();
+                },
+                icon: const Icon(LucideIcons.trash2, size: 18),
+                label: Text(
+                  buttonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
