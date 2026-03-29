@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -748,7 +750,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, e, s) => Container(
+                        errorBuilder: (_, __, ___) => Container(
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
@@ -1064,6 +1066,56 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             fontWeight: FontWeight.w700,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Instellingen',
+            icon: SizedBox(
+              width: 32,
+              height: 28,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  const Icon(
+                    LucideIcons.settings,
+                    size: 20,
+                    color: AppTheme.orange500,
+                  ),
+                  if (item.isManuallyCompleted)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange500,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Text(
+                            '100%',
+                            style: TextStyle(
+                              fontFamily: 'Manrope',
+                              fontSize: 7,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.white,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            onPressed: () => _openSettingsPage(item),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Stack(
         children: [
@@ -1185,14 +1237,22 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                item.coverUrl != null
-                    ? Image.network(
-                        item.coverUrl!,
+                item.customCoverPath != null
+                    ? Image.file(
+                        File(item.customCoverPath!),
                         fit: BoxFit.cover,
+                        gaplessPlayback: true,
                         errorBuilder: (context, error, stackTrace) =>
                             _buildCoverPlaceholder(),
                       )
-                    : _buildCoverPlaceholder(),
+                    : (item.coverUrl != null
+                          ? Image.network(
+                              item.coverUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  _buildCoverPlaceholder(),
+                            )
+                          : _buildCoverPlaceholder()),
                 Positioned(
                   top: 12,
                   left: 12,
@@ -1341,6 +1401,25 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       r'^(.*?)(?:\s*\([^)]*\))?$',
     ).firstMatch(platformWithFormat);
     return match?.group(1)?.trim() ?? platformWithFormat;
+  }
+
+  Future<void> _openSettingsPage(CollectionItem item) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _GameSettingsPage(
+          item: item,
+          onItemChanged: (updated) {
+            if (mounted) setState(() => _item = updated);
+          },
+        ),
+      ),
+    );
+    final refreshed = await DatabaseHelper.instance.getCollectionItemById(
+      widget.itemId,
+    );
+    if (mounted && refreshed != null) {
+      setState(() => _item = refreshed);
+    }
   }
 
   String _extractFormatName(String platformWithFormat, {String? fallback}) {
@@ -1675,7 +1754,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                               width: 36,
                               height: 36,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, e, s) =>
+                              errorBuilder: (_, __, ___) =>
                                   _buildAchievementImagePlaceholder(),
                             )
                           : _buildAchievementImagePlaceholder(),
@@ -2167,6 +2246,329 @@ class _AddRequirementSheetContentState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Game Settings Page ───────────────────────────────────────────────────────
+
+class _GameSettingsPage extends StatefulWidget {
+  const _GameSettingsPage({required this.item, this.onItemChanged});
+
+  final CollectionItem item;
+  final void Function(CollectionItem)? onItemChanged;
+
+  @override
+  State<_GameSettingsPage> createState() => _GameSettingsPageState();
+}
+
+class _GameSettingsPageState extends State<_GameSettingsPage> {
+  late bool _isManuallyCompleted;
+  late String? _customCoverPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _isManuallyCompleted = widget.item.isManuallyCompleted;
+    _customCoverPath = widget.item.customCoverPath;
+  }
+
+  CollectionItem get _updatedItem => widget.item.copyWith(
+    isManuallyCompleted: _isManuallyCompleted,
+    customCoverPath: _customCoverPath,
+    clearCustomCoverPath: _customCoverPath == null,
+  );
+
+  Future<void> _save() async {
+    final updated = _updatedItem;
+    await DatabaseHelper.instance.updateCollectionItem(updated);
+    widget.onItemChanged?.call(updated);
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    setState(() => _customCoverPath = picked.path);
+    await _save();
+  }
+
+  Future<void> _removeCover() async {
+    setState(() => _customCoverPath = null);
+    await _save();
+  }
+
+  Future<void> _showRestoreCoverSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Afbeelding herstellen?',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Je eigen afbeelding wordt verwijderd en de standaard omslagafbeelding wordt hersteld.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  await _removeCover();
+                },
+                icon: const Icon(LucideIcons.refreshCcw, size: 18),
+                label: const Text(
+                  'Standaard afbeelding herstellen',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleCompleted(bool value) async {
+    setState(() => _isManuallyCompleted = value);
+    await _save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.white,
+      appBar: AppBar(
+        backgroundColor: AppTheme.white,
+        foregroundColor: AppTheme.black,
+        surfaceTintColor: AppTheme.white,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.chevronLeft),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Instellingen',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: AppTheme.black,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildCoverSection(),
+              const SizedBox(height: 24),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              _buildCompletedRow(),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoverSection() {
+    late Widget coverWidget;
+    if (_customCoverPath != null) {
+      coverWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.file(
+                File(_customCoverPath!),
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => _buildCoverFallback(),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x00000000), Color(0xAA000000)],
+                    ),
+                  ),
+                  child: TextButton.icon(
+                    onPressed: _showRestoreCoverSheet,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.white,
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                    ),
+                    icon: const Icon(LucideIcons.refreshCcw, size: 16),
+                    label: const Text(
+                      'Standaard afbeelding herstellen',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (widget.item.coverUrl != null) {
+      coverWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.network(
+            widget.item.coverUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _buildCoverFallback(),
+          ),
+        ),
+      );
+    } else {
+      coverWidget = _buildCoverFallback(withRadius: true);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        coverWidget,
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _pickImage,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.orange500,
+            side: const BorderSide(color: AppTheme.orange500),
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          icon: const Icon(LucideIcons.imagePlus, size: 18),
+          label: const Text(
+            'Kies uit galerij',
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCoverFallback({bool withRadius = false}) {
+    Widget child = Container(
+      color: AppTheme.orange50,
+      child: const Center(
+        child: Icon(LucideIcons.gamepad2, size: 40, color: AppTheme.orange300),
+      ),
+    );
+    if (withRadius) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(aspectRatio: 16 / 9, child: child),
+      );
+    }
+    return child;
+  }
+
+  Widget _buildCompletedRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '100% voltooid',
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.black,
+              ),
+            ),
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(
+              switchTheme: SwitchThemeData(
+                thumbColor: WidgetStateProperty.all(AppTheme.white),
+                trackColor: WidgetStateProperty.resolveWith((states) {
+                  return states.contains(WidgetState.selected)
+                      ? AppTheme.orange500
+                      : AppTheme.orange100;
+                }),
+                trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+                thumbIcon: WidgetStateProperty.all(
+                  const Icon(Icons.circle, color: Colors.transparent, size: 1),
+                ),
+              ),
+            ),
+            child: Switch(
+              value: _isManuallyCompleted,
+              onChanged: _toggleCompleted,
+            ),
+          ),
+        ],
       ),
     );
   }

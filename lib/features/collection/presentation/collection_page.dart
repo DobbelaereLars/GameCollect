@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -620,14 +621,21 @@ class _CollectionPageState extends State<CollectionPage> {
                 ),
                 child: SizedBox(
                   width: 100,
-                  child: item.coverUrl != null
-                      ? Image.network(
-                          item.coverUrl!,
+                  child: item.customCoverPath != null
+                      ? Image.file(
+                          File(item.customCoverPath!),
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _buildPlaceholder(),
+                          gaplessPlayback: true,
+                          errorBuilder: (_, __, ___) => _buildPlaceholder(),
                         )
-                      : _buildPlaceholder(),
+                      : (item.coverUrl != null
+                            ? Image.network(
+                                item.coverUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(),
+                              )
+                            : _buildPlaceholder()),
                 ),
               ),
               // Meta data
@@ -703,14 +711,32 @@ class _CollectionPageState extends State<CollectionPage> {
                           ],
                         ),
                       const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: item.progressRatio,
-                        minHeight: 6,
-                        borderRadius: BorderRadius.circular(999),
-                        backgroundColor: AppTheme.orange100,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppTheme.orange500,
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: LinearProgressIndicator(
+                              value: item.progressRatio,
+                              minHeight: 6,
+                              borderRadius: BorderRadius.circular(999),
+                              backgroundColor: AppTheme.orange100,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                AppTheme.orange500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${(item.progressRatio * 100).round()}%',
+                            style: const TextStyle(
+                              fontFamily: 'Manrope',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              height: 1.4,
+                              color: AppTheme.gray500,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       _buildCardTagsRow(item),

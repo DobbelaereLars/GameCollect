@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gamecollect/features/discover/presentation/widgets/custom_lens_upload_view.dart';
-import 'dart:io';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/rawg_games_api.dart';
@@ -579,13 +578,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       : Image.network(
                           game.coverUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              LucideIcons.gamepad2,
-                              size: 34,
-                              color: AppTheme.black,
-                            );
-                          },
+                          errorBuilder: (_, __, ___) => const Icon(
+                            LucideIcons.gamepad2,
+                            size: 34,
+                            color: AppTheme.black,
+                          ),
                         ),
                 ),
                 Positioned(

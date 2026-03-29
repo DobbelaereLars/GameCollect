@@ -142,7 +142,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                                 width: 36,
                                 height: 36,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => _placeholder(),
+                                errorBuilder: (_, __, ___) => _placeholder(),
                               )
                             : _placeholder(),
                       ),

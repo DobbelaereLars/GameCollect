@@ -226,15 +226,13 @@ class _GameDetailPageState extends State<GameDetailPage> {
               child: Image.network(
                 coverUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Icon(
-                      LucideIcons.gamepad2,
-                      size: 64,
-                      color: AppTheme.gray500,
-                    ),
-                  );
-                },
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(
+                    LucideIcons.gamepad2,
+                    size: 64,
+                    color: AppTheme.gray500,
+                  ),
+                ),
               ),
             ),
 

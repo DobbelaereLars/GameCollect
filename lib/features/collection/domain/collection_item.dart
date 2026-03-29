@@ -136,7 +136,7 @@ class CustomRequirement {
   }) {
     return CustomRequirement(
       id: id ?? this.id,
-      title: this.title,
+      title: title,
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
       isEnabled: isEnabled ?? this.isEnabled,
@@ -169,6 +169,7 @@ class CollectionItem {
   final int apiId;
   final String title;
   final String? coverUrl;
+  final String? customCoverPath;
   final String? publisher;
   final String format; // 'Fysiek', 'Digitaal', 'Allebei'
   final List<String> selectedPlatforms;
@@ -181,12 +182,15 @@ class CollectionItem {
   final List<AchievementState> achievementStates;
   final List<CustomRequirement> requirements;
   final DateTime addedAt;
+  final bool isManuallyCompleted;
+  final DateTime? startedPlayingAt;
 
   CollectionItem({
     this.id,
     required this.apiId,
     required this.title,
     this.coverUrl,
+    this.customCoverPath,
     this.publisher,
     required this.format,
     List<String>? selectedPlatforms,
@@ -199,6 +203,8 @@ class CollectionItem {
     List<AchievementState>? achievementStates,
     List<CustomRequirement>? requirements,
     required this.addedAt,
+    this.isManuallyCompleted = false,
+    this.startedPlayingAt,
   }) : selectedPlatforms = List<String>.from(selectedPlatforms ?? const []),
        suggestedTags = List<String>.from(suggestedTags ?? const []),
        selectedSuggestedTags = List<String>.from(
@@ -217,6 +223,8 @@ class CollectionItem {
     int? apiId,
     String? title,
     String? coverUrl,
+    String? customCoverPath,
+    bool clearCustomCoverPath = false,
     String? publisher,
     String? format,
     List<String>? selectedPlatforms,
@@ -229,12 +237,18 @@ class CollectionItem {
     List<AchievementState>? achievementStates,
     List<CustomRequirement>? requirements,
     DateTime? addedAt,
+    bool? isManuallyCompleted,
+    DateTime? startedPlayingAt,
+    bool clearStartedPlayingAt = false,
   }) {
     return CollectionItem(
       id: id ?? this.id,
       apiId: apiId ?? this.apiId,
       title: title ?? this.title,
       coverUrl: coverUrl ?? this.coverUrl,
+      customCoverPath: clearCustomCoverPath
+          ? null
+          : (customCoverPath ?? this.customCoverPath),
       publisher: publisher ?? this.publisher,
       format: format ?? this.format,
       selectedPlatforms: selectedPlatforms ?? this.selectedPlatforms,
@@ -248,6 +262,10 @@ class CollectionItem {
       achievementStates: achievementStates ?? this.achievementStates,
       requirements: requirements ?? this.requirements,
       addedAt: addedAt ?? this.addedAt,
+      isManuallyCompleted: isManuallyCompleted ?? this.isManuallyCompleted,
+      startedPlayingAt: clearStartedPlayingAt
+          ? null
+          : (startedPlayingAt ?? this.startedPlayingAt),
     );
   }
 
@@ -259,6 +277,7 @@ class CollectionItem {
   }
 
   double get progressRatio {
+    if (isManuallyCompleted) return 1.0;
     final enabledAch = achievementStates.where((s) => s.isEnabled).toList();
     final enabledReq = requirements.where((r) => r.isEnabled).toList();
     final total = enabledAch.length + enabledReq.length;
@@ -279,6 +298,7 @@ class CollectionItem {
       'apiId': apiId,
       'title': title,
       'coverUrl': coverUrl,
+      'customCoverPath': customCoverPath,
       'publisher': publisher,
       'format': format,
       'selectedPlatforms': jsonEncode(selectedPlatforms),
@@ -296,6 +316,8 @@ class CollectionItem {
       ),
       'requirements': jsonEncode(requirements.map((r) => r.toMap()).toList()),
       'addedAt': addedAt.toIso8601String(),
+      'isManuallyCompleted': isManuallyCompleted ? 1 : 0,
+      'startedPlayingAt': startedPlayingAt?.toIso8601String(),
     };
   }
 
@@ -383,6 +405,7 @@ class CollectionItem {
       apiId: map['apiId'] as int? ?? 0,
       title: map['title'] as String? ?? 'Onbekende game',
       coverUrl: map['coverUrl'] as String?,
+      customCoverPath: map['customCoverPath'] as String?,
       publisher: map['publisher'] as String?,
       format: map['format'] as String? ?? 'Fysiek',
       selectedPlatforms: parseStringList(map['selectedPlatforms']),
@@ -407,6 +430,10 @@ class CollectionItem {
       achievementStates: parseAchievementStates(map['achievementStates']),
       requirements: parseRequirements(map['requirements']),
       addedAt: DateTime.parse(map['addedAt'] as String),
+      isManuallyCompleted: (map['isManuallyCompleted'] as int? ?? 0) != 0,
+      startedPlayingAt: map['startedPlayingAt'] != null
+          ? DateTime.tryParse(map['startedPlayingAt'] as String)
+          : null,
     );
   }
 }

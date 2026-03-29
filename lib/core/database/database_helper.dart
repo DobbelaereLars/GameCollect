@@ -23,7 +23,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -36,6 +36,7 @@ CREATE TABLE collection (
   apiId INTEGER NOT NULL,
   title TEXT NOT NULL,
   coverUrl TEXT,
+  customCoverPath TEXT,
   publisher TEXT,
   format TEXT NOT NULL,
   selectedPlatforms TEXT NOT NULL,
@@ -48,7 +49,9 @@ CREATE TABLE collection (
   playtimeEntries TEXT NOT NULL DEFAULT '[]',
   achievementStates TEXT NOT NULL DEFAULT '[]',
   requirements TEXT NOT NULL DEFAULT '[]',
-  addedAt TEXT NOT NULL
+  addedAt TEXT NOT NULL,
+  isManuallyCompleted INTEGER NOT NULL DEFAULT 0,
+  startedPlayingAt TEXT
 )
 ''');
     await db.execute('''
@@ -126,6 +129,14 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       } catch (_) {
         // Column may already exist from an earlier migration
       }
+    }
+    if (oldVersion < 7) {
+      await db.execute(
+        'ALTER TABLE collection ADD COLUMN customCoverPath TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE collection ADD COLUMN startedPlayingAt TEXT',
+      );
     }
   }
 
