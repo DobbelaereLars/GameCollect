@@ -18,6 +18,12 @@ import 'widgets/discover_search_bar.dart';
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
+  /// Set this to request that the Ontdekken tab opens and pushes the given game.
+  /// The shell listens to switch tabs; DiscoverPage listens to push the detail page.
+  static final gameDetailRequest = ValueNotifier<
+    ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
+  >(null);
+
   @override
   State<DiscoverPage> createState() => _DiscoverPageState();
 }
@@ -59,7 +65,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    DiscoverPage.gameDetailRequest.addListener(_onGameDetailRequest);
     _fetchGames(reset: true);
+    // Handle requests that arrived before this page was first built
+    if (DiscoverPage.gameDetailRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onGameDetailRequest());
+    }
   }
 
   @override
@@ -69,7 +80,29 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _searchController.dispose();
     _scrollController.dispose();
     _httpClient.close();
+    DiscoverPage.gameDetailRequest.removeListener(_onGameDetailRequest);
     super.dispose();
+  }
+
+  void _onGameDetailRequest() {
+    final request = DiscoverPage.gameDetailRequest.value;
+    if (request == null || !mounted) return;
+    DiscoverPage.gameDetailRequest.value = null;
+    // Defer push so the tab switch has completed rendering first
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Pop any stale detail page so there's never more than one back press
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => GameDetailPage(
+            gameId: request.gameId,
+            fallbackTitle: request.fallbackTitle,
+            fallbackCoverUrl: request.fallbackCoverUrl,
+          ),
+        ),
+      );
+    });
   }
 
   void _onScroll() {

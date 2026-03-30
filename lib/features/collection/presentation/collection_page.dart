@@ -65,6 +65,8 @@ class _CollectionPageState extends State<CollectionPage> {
     final query = CollectionPage.searchRequest.value;
     if (query == null) return;
     CollectionPage.searchRequest.value = null;
+    // Pop any detail/settings/notes pages open on this tab's navigator
+    Navigator.of(context).popUntil((route) => route.isFirst);
     _selectedFormats = {};
     _selectedPlatforms = {};
     _searchController.removeListener(_applyFilters);

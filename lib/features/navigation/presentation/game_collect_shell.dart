@@ -59,11 +59,13 @@ class _GameCollectShellState extends State<GameCollectShell> {
   void initState() {
     super.initState();
     CollectionPage.searchRequest.addListener(_onCollectionSearchRequest);
+    DiscoverPage.gameDetailRequest.addListener(_onDiscoverGameDetailRequest);
   }
 
   @override
   void dispose() {
     CollectionPage.searchRequest.removeListener(_onCollectionSearchRequest);
+    DiscoverPage.gameDetailRequest.removeListener(_onDiscoverGameDetailRequest);
     _pageController.dispose();
     super.dispose();
   }
@@ -71,6 +73,12 @@ class _GameCollectShellState extends State<GameCollectShell> {
   void _onCollectionSearchRequest() {
     if (CollectionPage.searchRequest.value != null) {
       _switchToTabAnimated(1);
+    }
+  }
+
+  void _onDiscoverGameDetailRequest() {
+    if (DiscoverPage.gameDetailRequest.value != null) {
+      _switchToTab(2);
     }
   }
 

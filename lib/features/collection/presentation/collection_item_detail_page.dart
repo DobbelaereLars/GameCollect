@@ -10,6 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
+import '../../discover/presentation/discover_page.dart';
 import 'disabled_achievements_page.dart';
 import 'disabled_requirements_page.dart';
 import 'notes_page.dart';
@@ -1155,6 +1156,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                     const SizedBox(height: 24),
                     _buildPlaytimeSummaryTile(item),
                     const SizedBox(height: 8),
+                    _buildDiscoverTile(item),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -1404,12 +1407,23 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   }
 
   Future<void> _openSettingsPage(CollectionItem item) async {
+    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
+        ? item.selectedPlatforms.first
+        : '';
+    final platformName = _extractPlatformName(primaryPlatformWithFormat);
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _GameSettingsPage(
           item: item,
+          platformName: platformName,
+          platformWithFormat: primaryPlatformWithFormat,
           onItemChanged: (updated) {
             if (mounted) setState(() => _item = updated);
+          },
+          onDeleted: () {
+            if (mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
           },
         ),
       ),
@@ -1545,6 +1559,76 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       color: item.totalPlaytimeMinutes == 0
                           ? AppTheme.gray300
                           : AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: AppTheme.gray300,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiscoverTile(CollectionItem item) {
+    return GestureDetector(
+      onTap: () {
+        // Cycle through null so the same game can be requested multiple times
+        DiscoverPage.gameDetailRequest.value = null;
+        DiscoverPage.gameDetailRequest.value = (
+          gameId: item.apiId,
+          fallbackTitle: item.title,
+          fallbackCoverUrl: item.coverUrl,
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.search,
+                size: 18,
+                color: AppTheme.orange600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bekijk in Ontdekken',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  Text(
+                    'Bekijk de gamepagina met details.',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.gray500,
                     ),
                   ),
                 ],
@@ -2254,10 +2338,19 @@ class _AddRequirementSheetContentState
 // ── Game Settings Page ───────────────────────────────────────────────────────
 
 class _GameSettingsPage extends StatefulWidget {
-  const _GameSettingsPage({required this.item, this.onItemChanged});
+  const _GameSettingsPage({
+    required this.item,
+    required this.platformName,
+    required this.platformWithFormat,
+    this.onItemChanged,
+    this.onDeleted,
+  });
 
   final CollectionItem item;
+  final String platformName;
+  final String platformWithFormat;
   final void Function(CollectionItem)? onItemChanged;
+  final void Function()? onDeleted;
 
   @override
   State<_GameSettingsPage> createState() => _GameSettingsPageState();
@@ -2266,12 +2359,20 @@ class _GameSettingsPage extends StatefulWidget {
 class _GameSettingsPageState extends State<_GameSettingsPage> {
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
+  bool _hasMultiplePlatforms = false;
 
   @override
   void initState() {
     super.initState();
     _isManuallyCompleted = widget.item.isManuallyCompleted;
     _customCoverPath = widget.item.customCoverPath;
+    _loadPlatformCount();
+  }
+
+  Future<void> _loadPlatformCount() async {
+    final count = await DatabaseHelper.instance
+        .countCollectionItemsByApiId(widget.item.apiId);
+    if (mounted) setState(() => _hasMultiplePlatforms = count > 1);
   }
 
   CollectionItem get _updatedItem => widget.item.copyWith(
@@ -2415,6 +2516,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildCompletedRow(),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              _buildDeleteFromPlatformRow(),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              if (_hasMultiplePlatforms) ...[
+                _buildDeleteFromAllRow(),
+                const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              ],
             ],
           ),
         ),
@@ -2569,6 +2676,260 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteFromPlatformSheet() async {
+    final sameGameCount = await DatabaseHelper.instance
+        .countCollectionItemsByApiId(widget.item.apiId);
+    final isLastPlatform = sameGameCount <= 1;
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${widget.item.title} verwijderen?',
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isLastPlatform
+                    ? 'De game wordt volledig verwijderd uit je collectie. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.'
+                    : 'De game wordt verwijderd van ${widget.platformName}. Al je voortgang, speelduur en instellingen voor dit platform gaan permanent verloren.',
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  if (widget.item.id != null) {
+                    final updatedPlatforms =
+                        List<String>.from(widget.item.selectedPlatforms)
+                          ..remove(widget.platformWithFormat);
+                    if (updatedPlatforms.isEmpty) {
+                      await DatabaseHelper.instance
+                          .deleteCollectionItem(widget.item.id!);
+                    } else {
+                      await DatabaseHelper.instance.updateCollectionItem(
+                        widget.item.copyWith(
+                          selectedPlatforms: updatedPlatforms,
+                        ),
+                      );
+                    }
+                    messenger
+                      ..removeCurrentSnackBar()
+                      ..showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isLastPlatform
+                                ? '"${widget.item.title}" volledig verwijderd uit je collectie.'
+                                : '"${widget.item.title}" verwijderd van ${widget.platformName}.',
+                          ),
+                        ),
+                      );
+                    widget.onDeleted?.call();
+                  }
+                },
+                icon: const Icon(LucideIcons.trash2, size: 18),
+                label: const Text(
+                  'Verwijderen',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteFromAllSheet() async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${widget.item.title} volledig verwijderen?',
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'De game wordt van elk platform verwijderd. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  await DatabaseHelper.instance
+                      .deleteCollectionItemsByApiId(widget.item.apiId);
+                  messenger
+                    ..removeCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '"${widget.item.title}" volledig verwijderd uit je collectie.',
+                        ),
+                      ),
+                    );
+                  widget.onDeleted?.call();
+                },
+                icon: const Icon(LucideIcons.trash2, size: 18),
+                label: const Text(
+                  'Volledig verwijderen',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDeleteFromPlatformRow() {
+    return InkWell(
+      onTap: _showDeleteFromPlatformSheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.trash2, size: 18, color: Colors.red),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Verwijder van ${widget.platformName}',
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteFromAllRow() {
+    return InkWell(
+      onTap: _showDeleteFromAllSheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.trash2, size: 18, color: Colors.red),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Verwijder van elk platform',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
