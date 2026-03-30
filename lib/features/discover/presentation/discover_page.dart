@@ -20,9 +20,10 @@ class DiscoverPage extends StatefulWidget {
 
   /// Set this to request that the Ontdekken tab opens and pushes the given game.
   /// The shell listens to switch tabs; DiscoverPage listens to push the detail page.
-  static final gameDetailRequest = ValueNotifier<
-    ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
-  >(null);
+  static final gameDetailRequest =
+      ValueNotifier<
+        ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
+      >(null);
 
   @override
   State<DiscoverPage> createState() => _DiscoverPageState();
@@ -69,7 +70,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _fetchGames(reset: true);
     // Handle requests that arrived before this page was first built
     if (DiscoverPage.gameDetailRequest.value != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onGameDetailRequest());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onGameDetailRequest(),
+      );
     }
   }
 

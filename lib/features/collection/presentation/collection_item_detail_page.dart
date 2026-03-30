@@ -2370,8 +2370,9 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 
   Future<void> _loadPlatformCount() async {
-    final count = await DatabaseHelper.instance
-        .countCollectionItemsByApiId(widget.item.apiId);
+    final count = await DatabaseHelper.instance.countCollectionItemsByApiId(
+      widget.item.apiId,
+    );
     if (mounted) setState(() => _hasMultiplePlatforms = count > 1);
   }
 
@@ -2743,12 +2744,13 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                 onPressed: () async {
                   Navigator.of(sheetContext).pop();
                   if (widget.item.id != null) {
-                    final updatedPlatforms =
-                        List<String>.from(widget.item.selectedPlatforms)
-                          ..remove(widget.platformWithFormat);
+                    final updatedPlatforms = List<String>.from(
+                      widget.item.selectedPlatforms,
+                    )..remove(widget.platformWithFormat);
                     if (updatedPlatforms.isEmpty) {
-                      await DatabaseHelper.instance
-                          .deleteCollectionItem(widget.item.id!);
+                      await DatabaseHelper.instance.deleteCollectionItem(
+                        widget.item.id!,
+                      );
                     } else {
                       await DatabaseHelper.instance.updateCollectionItem(
                         widget.item.copyWith(
@@ -2848,8 +2850,9 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               OutlinedButton.icon(
                 onPressed: () async {
                   Navigator.of(sheetContext).pop();
-                  await DatabaseHelper.instance
-                      .deleteCollectionItemsByApiId(widget.item.apiId);
+                  await DatabaseHelper.instance.deleteCollectionItemsByApiId(
+                    widget.item.apiId,
+                  );
                   messenger
                     ..removeCurrentSnackBar()
                     ..showSnackBar(
