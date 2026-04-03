@@ -4,12 +4,15 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
+import '../../discover/data/rawg_games_api.dart';
 import '../../discover/presentation/discover_page.dart';
 import 'disabled_achievements_page.dart';
 import 'disabled_requirements_page.dart';
@@ -2363,6 +2366,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   bool _hasMultiplePlatforms = false;
   List<String> _availablePlatforms = [];
   Set<String> _alreadyAddedPlatformNames = {};
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -2550,6 +2554,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                 _buildAddPlatformRow(),
                 const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               ],
+              _buildRefreshDataRow(),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildDeleteFromPlatformRow(),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               if (_hasMultiplePlatforms) ...[
@@ -2916,6 +2922,133 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         );
       },
     );
+  }
+
+  Widget _buildRefreshDataRow() {
+    return InkWell(
+      onTap: _isRefreshing ? null : _refreshGameData,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            if (_isRefreshing)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.orange500,
+                ),
+              )
+            else
+              const Icon(
+                LucideIcons.refreshCcw,
+                size: 18,
+                color: AppTheme.orange500,
+              ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Ophalen van nieuwe gegevens',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshGameData() async {
+    final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+    if (apiKey.isEmpty) return;
+    setState(() => _isRefreshing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final client = http.Client();
+    try {
+      final api = const RawgGamesApi();
+      final details = await api.fetchGameDetails(
+        client: client,
+        apiKey: apiKey,
+        id: widget.item.apiId,
+      );
+      final achievements = await api.fetchGameAchievements(
+        client: client,
+        apiKey: apiKey,
+        id: widget.item.apiId,
+      );
+      final allItems = await DatabaseHelper.instance.getCollectionItemsByApiId(
+        widget.item.apiId,
+      );
+      for (final existing in allItems) {
+        final updated = existing.copyWith(
+          title: details.title,
+          coverUrl: details.coverUrl ?? existing.coverUrl,
+          publisher: details.publishers.isNotEmpty
+              ? details.publishers.first
+              : existing.publisher,
+          suggestedTags: details.tags.take(12).toList(),
+          availablePlatforms: details.platforms,
+        );
+        await DatabaseHelper.instance.updateCollectionItem(updated);
+      }
+      if (achievements.isNotEmpty) {
+        await DatabaseHelper.instance.upsertAchievementsForGame(
+          widget.item.apiId,
+          achievements,
+        );
+      }
+      await _loadPlatformCount();
+      final refreshed = await DatabaseHelper.instance.getCollectionItemById(
+        widget.item.id!,
+      );
+      if (mounted && refreshed != null) {
+        widget.onItemChanged?.call(refreshed);
+      }
+      if (mounted) {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Gamegegevens zijn bijgewerkt.'),
+            ),
+          );
+      }
+    } on SocketException {
+      if (mounted) {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Geen internetverbinding.'),
+            ),
+          );
+      }
+    } on TimeoutException {
+      if (mounted) {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Er is iets misgegaan.')),
+          );
+      }
+    } catch (_) {
+      if (mounted) {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Er is iets misgegaan.')),
+          );
+      }
+    } finally {
+      client.close();
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   Widget _buildAddPlatformRow() {

@@ -291,6 +291,26 @@ CREATE TABLE IF NOT EXISTS game_achievements (
     await batch.commit(noResult: true);
   }
 
+  Future<void> upsertAchievementsForGame(
+    int apiId,
+    List<RawgAchievement> achievements,
+  ) async {
+    if (achievements.isEmpty) return;
+    final db = await instance.database;
+    final batch = db.batch();
+    for (final a in achievements) {
+      batch.insert('game_achievements', {
+        'apiId': apiId,
+        'rawgId': a.id,
+        'name': a.name,
+        'description': a.description,
+        'imageUrl': a.imageUrl,
+        'percent': a.percent,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<List<Map<String, dynamic>>> getRawAchievementsForGame(
     int apiId,
   ) async {
