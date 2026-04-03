@@ -23,7 +23,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -51,7 +51,8 @@ CREATE TABLE collection (
   requirements TEXT NOT NULL DEFAULT '[]',
   addedAt TEXT NOT NULL,
   isManuallyCompleted INTEGER NOT NULL DEFAULT 0,
-  startedPlayingAt TEXT
+  startedPlayingAt TEXT,
+  availablePlatforms TEXT NOT NULL DEFAULT '[]'
 )
 ''');
     await db.execute('''
@@ -138,6 +139,11 @@ CREATE TABLE IF NOT EXISTS game_achievements (
         'ALTER TABLE collection ADD COLUMN startedPlayingAt TEXT',
       );
     }
+    if (oldVersion < 8) {
+      await db.execute(
+        "ALTER TABLE collection ADD COLUMN availablePlatforms TEXT NOT NULL DEFAULT '[]'",
+      );
+    }
   }
 
   Future<int> insertCollectionItem(CollectionItem item) async {
@@ -219,6 +225,16 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       whereArgs: [apiId],
     );
     notifyListeners();
+  }
+
+  Future<List<CollectionItem>> getCollectionItemsByApiId(int apiId) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'collection',
+      where: 'apiId = ?',
+      whereArgs: [apiId],
+    );
+    return result.map((json) => CollectionItem.fromMap(json)).toList();
   }
 
   Future<int> countCollectionItemsByApiId(int apiId) async {

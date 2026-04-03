@@ -184,6 +184,7 @@ class CollectionItem {
   final DateTime addedAt;
   final bool isManuallyCompleted;
   final DateTime? startedPlayingAt;
+  final List<String> availablePlatforms;
 
   CollectionItem({
     this.id,
@@ -205,7 +206,9 @@ class CollectionItem {
     required this.addedAt,
     this.isManuallyCompleted = false,
     this.startedPlayingAt,
+    List<String>? availablePlatforms,
   }) : selectedPlatforms = List<String>.from(selectedPlatforms ?? const []),
+       availablePlatforms = List<String>.from(availablePlatforms ?? const []),
        suggestedTags = List<String>.from(suggestedTags ?? const []),
        selectedSuggestedTags = List<String>.from(
          selectedSuggestedTags ?? const [],
@@ -240,6 +243,7 @@ class CollectionItem {
     bool? isManuallyCompleted,
     DateTime? startedPlayingAt,
     bool clearStartedPlayingAt = false,
+    List<String>? availablePlatforms,
   }) {
     return CollectionItem(
       id: id ?? this.id,
@@ -266,6 +270,7 @@ class CollectionItem {
       startedPlayingAt: clearStartedPlayingAt
           ? null
           : (startedPlayingAt ?? this.startedPlayingAt),
+      availablePlatforms: availablePlatforms ?? this.availablePlatforms,
     );
   }
 
@@ -318,6 +323,7 @@ class CollectionItem {
       'addedAt': addedAt.toIso8601String(),
       'isManuallyCompleted': isManuallyCompleted ? 1 : 0,
       'startedPlayingAt': startedPlayingAt?.toIso8601String(),
+      'availablePlatforms': jsonEncode(availablePlatforms),
     };
   }
 
@@ -434,6 +440,7 @@ class CollectionItem {
       startedPlayingAt: map['startedPlayingAt'] != null
           ? DateTime.tryParse(map['startedPlayingAt'] as String)
           : null,
+      availablePlatforms: parseStringList(map['availablePlatforms']),
     );
   }
 }

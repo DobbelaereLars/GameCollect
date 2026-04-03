@@ -15,6 +15,7 @@ import 'disabled_achievements_page.dart';
 import 'disabled_requirements_page.dart';
 import 'notes_page.dart';
 import 'playtime_page.dart';
+import 'widgets/add_platform_sheet.dart';
 
 class CollectionItemDetailPage extends StatefulWidget {
   const CollectionItemDetailPage({
@@ -2360,6 +2361,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
   bool _hasMultiplePlatforms = false;
+  List<String> _availablePlatforms = [];
+  Set<String> _alreadyAddedPlatformNames = {};
 
   @override
   void initState() {
@@ -2373,7 +2376,31 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     final count = await DatabaseHelper.instance.countCollectionItemsByApiId(
       widget.item.apiId,
     );
-    if (mounted) setState(() => _hasMultiplePlatforms = count > 1);
+    final allItems = await DatabaseHelper.instance.getCollectionItemsByApiId(
+      widget.item.apiId,
+    );
+    final usedNames = <String>{};
+    for (final it in allItems) {
+      for (final p in it.selectedPlatforms) {
+        final name = _platformNameFrom(p);
+        if (name.isNotEmpty) usedNames.add(name);
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _hasMultiplePlatforms = count > 1;
+        _availablePlatforms = [...widget.item.availablePlatforms];
+        _alreadyAddedPlatformNames = usedNames;
+      });
+    }
+  }
+
+  static String _platformNameFrom(String platformWithFormat) {
+    if (platformWithFormat.isEmpty) return '';
+    final match = RegExp(
+      r'^(.*?)(?:\s*\([^)]*\))?$',
+    ).firstMatch(platformWithFormat);
+    return match?.group(1)?.trim() ?? platformWithFormat;
   }
 
   CollectionItem get _updatedItem => widget.item.copyWith(
@@ -2517,6 +2544,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildCompletedRow(),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              if (_availablePlatforms
+                  .where((p) => !_alreadyAddedPlatformNames.contains(p))
+                  .isNotEmpty) ...[
+                _buildAddPlatformRow(),
+                const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              ],
               _buildDeleteFromPlatformRow(),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               if (_hasMultiplePlatforms) ...[
@@ -2885,6 +2918,48 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     );
   }
 
+  Widget _buildAddPlatformRow() {
+    return InkWell(
+      onTap: _showAddPlatformSheet,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            Icon(LucideIcons.circlePlus, size: 18, color: AppTheme.orange500),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Toevoegen aan ander platform',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAddPlatformSheet() async {
+    final unownedPlatforms = _availablePlatforms
+        .where((p) => !_alreadyAddedPlatformNames.contains(p))
+        .toList();
+    if (unownedPlatforms.isEmpty) return;
+    await AddPlatformSheet.show(
+      context,
+      item: widget.item,
+      unownedPlatforms: unownedPlatforms,
+      onAdded: () async {
+        await _loadPlatformCount();
+        widget.onItemChanged?.call(widget.item);
+      },
+    );
+  }
+
   Widget _buildDeleteFromPlatformRow() {
     return InkWell(
       onTap: _showDeleteFromPlatformSheet,
@@ -2937,3 +3012,6 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     );
   }
 }
+
+// ── Add Platform Sheet ────────────────────────────────────────────────────────
+// Delegated to widgets/add_platform_sheet.dart (AddPlatformSheet)

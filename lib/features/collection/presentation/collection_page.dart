@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_helper.dart';
 import '../domain/collection_item.dart';
 import 'collection_item_detail_page.dart';
+import 'widgets/add_platform_sheet.dart';
 import '../../discover/presentation/widgets/discover_search_bar.dart';
 
 class CollectionPage extends StatefulWidget {
@@ -880,6 +881,22 @@ class _CollectionPageState extends State<CollectionPage> {
 
     final hasMultipleGameEntries = sameGameCount > 1;
 
+    // Determine unowned platforms
+    final allItems = await DatabaseHelper.instance.getCollectionItemsByApiId(
+      item.apiId,
+    );
+    final usedNames = <String>{};
+    for (final it in allItems) {
+      for (final p in it.selectedPlatforms) {
+        final name = p.replaceAll(RegExp(r' \(.*\)$'), '');
+        if (name.isNotEmpty) usedNames.add(name);
+      }
+    }
+    final unownedPlatforms = item.availablePlatforms
+        .where((p) => !usedNames.contains(p))
+        .toList();
+    if (!mounted) return;
+
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -894,6 +911,26 @@ class _CollectionPageState extends State<CollectionPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (unownedPlatforms.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(
+                      LucideIcons.circlePlus,
+                      color: AppTheme.orange500,
+                    ),
+                    title: Text(
+                      'Toevoegen aan ander platform',
+                      style: const TextStyle(color: AppTheme.orange500),
+                    ),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await AddPlatformSheet.show(
+                        context,
+                        item: item,
+                        unownedPlatforms: unownedPlatforms,
+                        onAdded: _loadCollection,
+                      );
+                    },
+                  ),
                 ListTile(
                   leading: Icon(
                     hasMultipleGameEntries

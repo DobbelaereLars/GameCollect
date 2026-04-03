@@ -1,152 +1,93 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../domain/collection_item.dart';
-import '../../../discover/data/rawg_games_api.dart';
-import '../../../discover/domain/rawg_game.dart';
 
-class AddToCollectionSheet extends StatefulWidget {
-  final RawgGameDetails game;
+class AddPlatformSheet extends StatefulWidget {
+  const AddPlatformSheet({
+    super.key,
+    required this.item,
+    required this.unownedPlatforms,
+    this.onAdded,
+  });
 
-  const AddToCollectionSheet({super.key, required this.game});
+  final CollectionItem item;
+  final List<String> unownedPlatforms;
+  final VoidCallback? onAdded;
 
-  static Future<void> show(BuildContext context, RawgGameDetails game) {
-    return showModalBottomSheet(
+  static Future<void> show(
+    BuildContext context, {
+    required CollectionItem item,
+    required List<String> unownedPlatforms,
+    VoidCallback? onAdded,
+  }) {
+    return showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       useRootNavigator: true,
+      isScrollControlled: true,
       backgroundColor: AppTheme.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: AddToCollectionSheet(game: game),
+      builder: (_) => AddPlatformSheet(
+        item: item,
+        unownedPlatforms: unownedPlatforms,
+        onAdded: onAdded,
       ),
     );
   }
 
   @override
-  State<AddToCollectionSheet> createState() => _AddToCollectionSheetState();
+  State<AddPlatformSheet> createState() => _AddPlatformSheetState();
 }
 
-class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
-  final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
+class _AddPlatformSheetState extends State<AddPlatformSheet> {
   int _currentStep = 0;
   final Set<String> _selectedPlatforms = {};
   List<String> _platformsToFormat = [];
   final Map<String, String> _platformFormats = {};
   bool _isSaving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.game.platforms.length == 1) {
-      final platform = widget.game.platforms.first;
-      _selectedPlatforms.add(platform);
-      _platformsToFormat = [platform];
-      _platformFormats[platform] = 'Fysiek';
-      // Skip to format screen if only 1 platform
-      _currentStep = 1;
-    }
-  }
-
   Future<void> _saveToCollection() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
-
     try {
-      final customizedPlatforms = _selectedPlatforms.map((p) {
-        final format = _platformFormats[p] ?? 'Fysiek';
-        return '$p ($format)';
-      }).toList();
+      final rawRows = await DatabaseHelper.instance.getRawAchievementsForGame(
+        widget.item.apiId,
+      );
+      final initialStates = rawRows
+          .map(
+            (row) => AchievementState(
+              rawgId: row['rawgId'] as int,
+              isCompleted: false,
+              isEnabled: true,
+            ),
+          )
+          .toList(growable: false);
 
-      List<AchievementState> initialStates = const [];
-      final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
-      if (rawgApiKey.isNotEmpty) {
-        final hasAchievements = await DatabaseHelper.instance
-            .hasAchievementsForGame(widget.game.id);
-        if (!hasAchievements) {
-          final client = http.Client();
-          try {
-            final achievements = await _rawgGamesApi.fetchGameAchievements(
-              client: client,
-              apiKey: rawgApiKey,
-              id: widget.game.id,
-            );
-            debugPrint(
-              '[GameCollect] Achievements opgehaald voor game ${widget.game.id}: ${achievements.length} stuks',
-            );
-            await DatabaseHelper.instance.insertAchievementsForGame(
-              widget.game.id,
-              achievements,
-            );
-            initialStates = achievements
-                .map(
-                  (a) => AchievementState(
-                    rawgId: a.id,
-                    isCompleted: false,
-                    isEnabled: true,
-                  ),
-                )
-                .toList(growable: false);
-          } catch (e, st) {
-            debugPrint('[GameCollect] Achievements ophalen mislukt: $e\n$st');
-            initialStates = const [];
-          } finally {
-            client.close();
-          }
-        } else {
-          final rawRows = await DatabaseHelper.instance
-              .getRawAchievementsForGame(widget.game.id);
-          initialStates = rawRows
-              .map(
-                (row) => AchievementState(
-                  rawgId: row['rawgId'] as int,
-                  isCompleted: false,
-                  isEnabled: true,
-                ),
-              )
-              .toList(growable: false);
-        }
-      } else {
-        debugPrint(
-          '[GameCollect] RAWG_API_KEY is leeg — achievements overgeslagen.',
-        );
-      }
-
-      for (final platformWithFormat in customizedPlatforms) {
-        final formatMatch = RegExp(
-          r'\((.*?)\)$',
-        ).firstMatch(platformWithFormat);
-        final format = formatMatch?.group(1) ?? 'Fysiek & Digitaal';
-
-        final item = CollectionItem(
-          apiId: widget.game.id,
-          title: widget.game.title,
-          coverUrl: widget.game.coverUrl,
-          publisher: widget.game.publishers.isNotEmpty
-              ? widget.game.publishers.first
-              : null,
+      for (final platform in _platformsToFormat) {
+        final format = _platformFormats[platform] ?? 'Fysiek';
+        final platformWithFormat = '$platform ($format)';
+        final newItem = CollectionItem(
+          apiId: widget.item.apiId,
+          title: widget.item.title,
+          coverUrl: widget.item.coverUrl,
+          publisher: widget.item.publisher,
           format: format,
           selectedPlatforms: [platformWithFormat],
-          availablePlatforms: widget.game.platforms,
-          suggestedTags: widget.game.tags.take(12).toList(),
+          availablePlatforms: widget.item.availablePlatforms,
+          suggestedTags: widget.item.suggestedTags,
           selectedSuggestedTags: const [],
           customTags: const [],
           selectedCustomTags: const [],
           notes: '',
           playtimeEntries: const [],
           achievementStates: initialStates,
+          requirements: const [],
           addedAt: DateTime.now(),
         );
-
-        await DatabaseHelper.instance.insertCollectionItem(item);
+        await DatabaseHelper.instance.insertCollectionItem(newItem);
       }
 
       if (mounted) {
@@ -156,9 +97,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
           ..showSnackBar(
             const SnackBar(content: Text('Toegevoegd aan collectie!')),
           );
+        widget.onAdded?.call();
       }
-    } catch (e, st) {
-      debugPrint('[GameCollect] Opslaan mislukt: $e\n$st');
+    } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
@@ -189,7 +130,6 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       });
       return;
     }
-
     if (_currentStep >= _platformsToFormat.length) {
       _saveToCollection();
     } else {
@@ -199,20 +139,11 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
 
   void _previousStep() {
     setState(() {
-      if (_currentStep > 0) {
-        _currentStep--;
-      }
+      if (_currentStep > 0) _currentStep--;
     });
   }
 
   Widget _buildPlatformSelection(TextTheme textTheme) {
-    if (widget.game.platforms.isEmpty) {
-      return Text(
-        'Geen platforms beschikbaar voor deze game.',
-        style: textTheme.bodyMedium?.copyWith(color: AppTheme.gray500),
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -232,7 +163,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
         Wrap(
           spacing: 8,
           runSpacing: 0,
-          children: widget.game.platforms.map((platform) {
+          children: widget.unownedPlatforms.map((platform) {
             final isSelected = _selectedPlatforms.contains(platform);
             return FilterChip(
               showCheckmark: false,
@@ -295,10 +226,8 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
     if (_currentStep == 0 || _currentStep > _platformsToFormat.length) {
       return const SizedBox.shrink();
     }
-
     final platform = _platformsToFormat[_currentStep - 1];
     final selectedFormat = _platformFormats[platform] ?? 'Fysiek';
-
     final isLastStep = _currentStep == _platformsToFormat.length;
 
     return Column(
@@ -306,15 +235,13 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       children: [
         Row(
           children: [
-            if (widget.game.platforms.length > 1) ...[
-              IconButton(
-                icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.black),
-                onPressed: _previousStep,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 8),
-            ],
+            IconButton(
+              icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.black),
+              onPressed: _previousStep,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 8),
             Text(
               'Formaat voor $platform',
               style: textTheme.bodyLarge?.copyWith(
@@ -324,11 +251,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
             ),
           ],
         ),
-        SizedBox(height: widget.game.platforms.length > 1 ? 0 : 4),
+        const SizedBox(height: 0),
         Padding(
-          padding: EdgeInsets.only(
-            left: widget.game.platforms.length > 1 ? 57 : 0,
-          ),
+          padding: const EdgeInsets.only(left: 57),
           child: Text(
             'Selecteer de vorm waarin je de game bezit',
             style: textTheme.bodySmall?.copyWith(color: AppTheme.gray500),
@@ -346,9 +271,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
               selected: isFormatSelected,
               onSelected: (selected) {
                 if (selected) {
-                  setState(() {
-                    _platformFormats[platform] = format;
-                  });
+                  setState(() => _platformFormats[platform] = format);
                 }
               },
               selectedColor: AppTheme.orange500,
@@ -412,7 +335,6 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-
     return PopScope(
       canPop: !_isSaving,
       child: Padding(
@@ -425,7 +347,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Toevoegen aan collectie',
+                  'Platform toevoegen',
                   style: textTheme.titleLarge?.copyWith(
                     color: AppTheme.black,
                     fontWeight: FontWeight.w700,
