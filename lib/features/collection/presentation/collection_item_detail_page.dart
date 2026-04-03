@@ -1038,7 +1038,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return '${hours}u ${minutes}m';
   }
 
-  void _shareGameProgress(CollectionItem item) {
+  Future<void> _shareGameProgress(CollectionItem item) async {
     final progress = item.isManuallyCompleted
         ? '100%'
         : '${(item.progressRatio * 100).round()}%';
@@ -1053,7 +1053,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     final text =
         '🎮 ${item.title}$platformLine\n\nVoortgang: $progress\nSpeelduur: $playtime\n\nGedeeld via GameCollect';
 
-    Share.share(text).catchError((_) {});
+    try {
+      await SharePlus.instance.share(ShareParams(text: text));
+    } catch (_) {}
   }
 
   @override
@@ -1099,7 +1101,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               size: 20,
               color: AppTheme.orange500,
             ),
-            onPressed: () => _shareGameProgress(item),
+            onPressed: () async => _shareGameProgress(item),
           ),
           IconButton(
             tooltip: 'Instellingen',
