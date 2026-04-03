@@ -8,6 +8,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
@@ -1037,6 +1038,24 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return '${hours}u ${minutes}m';
   }
 
+  void _shareGameProgress(CollectionItem item) {
+    final progress = item.isManuallyCompleted
+        ? '100%'
+        : '${(item.progressRatio * 100).round()}%';
+    final playtime = item.totalPlaytimeMinutes == 0
+        ? 'Nog niet bijgehouden'
+        : _formatMinutes(item.totalPlaytimeMinutes);
+    final platform = item.selectedPlatforms.isNotEmpty
+        ? item.selectedPlatforms.first.replaceAll(RegExp(r'\s*\(.*\)$'), '')
+        : '';
+    final platformLine = platform.isNotEmpty ? '\nPlatform: $platform' : '';
+
+    final text =
+        '🎮 ${item.title}$platformLine\n\nVoortgang: $progress\nSpeelduur: $playtime\n\nGedeeld via GameCollect';
+
+    Share.share(text).catchError((_) {});
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -1058,6 +1077,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         backgroundColor: AppTheme.white,
         foregroundColor: AppTheme.black,
         surfaceTintColor: AppTheme.white,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(LucideIcons.chevronLeft),
           onPressed: () => Navigator.of(context).pop(),
@@ -1072,6 +1092,15 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Delen',
+            icon: const Icon(
+              LucideIcons.share2,
+              size: 20,
+              color: AppTheme.orange500,
+            ),
+            onPressed: () => _shareGameProgress(item),
+          ),
           IconButton(
             tooltip: 'Instellingen',
             icon: SizedBox(
@@ -3014,9 +3043,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         messenger
           ..removeCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
-              content: Text('Gamegegevens zijn bijgewerkt.'),
-            ),
+            const SnackBar(content: Text('Gamegegevens zijn bijgewerkt.')),
           );
       }
     } on SocketException {
@@ -3024,9 +3051,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         messenger
           ..removeCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
-              content: Text('Geen internetverbinding.'),
-            ),
+            const SnackBar(content: Text('Geen internetverbinding.')),
           );
       }
     } on TimeoutException {
