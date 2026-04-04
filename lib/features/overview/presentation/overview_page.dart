@@ -102,12 +102,9 @@ class _OverviewPageState extends State<OverviewPage> {
       _slowConnectionTimer?.cancel();
       if (!mounted) return;
       setState(() {
-        _trendingGames =
-            page.games
-                .where(
-                  (g) => g.coverUrl != null && g.coverUrl!.isNotEmpty,
-                )
-                .toList();
+        _trendingGames = page.games
+            .where((g) => g.coverUrl != null && g.coverUrl!.isNotEmpty)
+            .toList();
         _isLoadingTrending = false;
         _isSlowTrending = false;
       });
