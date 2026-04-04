@@ -59,13 +59,23 @@ class _GameCollectShellState extends State<GameCollectShell> {
   void initState() {
     super.initState();
     CollectionPage.searchRequest.addListener(_onCollectionSearchRequest);
+    CollectionPage.itemDetailRequest.addListener(
+      _onCollectionItemDetailRequest,
+    );
     DiscoverPage.gameDetailRequest.addListener(_onDiscoverGameDetailRequest);
+    OverviewPage.switchToTabRequest.addListener(_onOverviewSwitchToTabRequest);
   }
 
   @override
   void dispose() {
     CollectionPage.searchRequest.removeListener(_onCollectionSearchRequest);
+    CollectionPage.itemDetailRequest.removeListener(
+      _onCollectionItemDetailRequest,
+    );
     DiscoverPage.gameDetailRequest.removeListener(_onDiscoverGameDetailRequest);
+    OverviewPage.switchToTabRequest.removeListener(
+      _onOverviewSwitchToTabRequest,
+    );
     _pageController.dispose();
     super.dispose();
   }
@@ -76,9 +86,23 @@ class _GameCollectShellState extends State<GameCollectShell> {
     }
   }
 
+  void _onCollectionItemDetailRequest() {
+    if (CollectionPage.itemDetailRequest.value != null) {
+      _switchToTab(1);
+    }
+  }
+
   void _onDiscoverGameDetailRequest() {
     if (DiscoverPage.gameDetailRequest.value != null) {
       _switchToTab(2);
+    }
+  }
+
+  void _onOverviewSwitchToTabRequest() {
+    final index = OverviewPage.switchToTabRequest.value;
+    if (index != null) {
+      OverviewPage.switchToTabRequest.value = null;
+      _switchToTabAnimated(index);
     }
   }
 

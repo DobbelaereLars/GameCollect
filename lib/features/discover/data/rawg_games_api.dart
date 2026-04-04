@@ -49,6 +49,37 @@ class RawgGamesApi {
     return RawgGamesPage(games: games, nextPageUrl: next);
   }
 
+  /// Fetches the all-time top-rated / most popular games by Metacritic score.
+  Future<RawgGamesPage> fetchTopRatedGames({
+    required http.Client client,
+    required String apiKey,
+    required int pageSize,
+  }) async {
+    final uri = Uri.https('api.rawg.io', '/api/games', {
+      'key': apiKey,
+      'page_size': '$pageSize',
+      'ordering': '-metacritic',
+      'metacritic': '1,100',
+    });
+
+    final response = await client.get(uri).timeout(const Duration(seconds: 12));
+
+    if (response.statusCode != 200) {
+      throw Exception('RAWG request mislukt (${response.statusCode}).');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final results = decoded['results'] as List<dynamic>? ?? const [];
+    final next = decoded['next'] as String?;
+
+    final games = results
+        .whereType<Map<String, dynamic>>()
+        .map(RawgGame.fromJson)
+        .toList(growable: false);
+
+    return RawgGamesPage(games: games, nextPageUrl: next);
+  }
+
   Future<RawgGameDetails> fetchGameDetails({
     required http.Client client,
     required String apiKey,

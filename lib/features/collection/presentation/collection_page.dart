@@ -16,6 +16,10 @@ class CollectionPage extends StatefulWidget {
   /// The shell observes this to switch to the collection tab automatically.
   static final searchRequest = ValueNotifier<String?>(null);
 
+  /// Set this to an item ID to open that item's detail page within the Collectie tab.
+  /// The shell observes this to switch to tab 1; CollectionPage handles the push.
+  static final itemDetailRequest = ValueNotifier<int?>(null);
+
   @override
   State<CollectionPage> createState() => _CollectionPageState();
 }
@@ -52,6 +56,12 @@ class _CollectionPageState extends State<CollectionPage> {
     _searchController.addListener(_applyFilters);
     DatabaseHelper.instance.addListener(_loadCollection);
     CollectionPage.searchRequest.addListener(_onSearchRequest);
+    CollectionPage.itemDetailRequest.addListener(_onItemDetailRequest);
+    if (CollectionPage.itemDetailRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onItemDetailRequest(),
+      );
+    }
   }
 
   @override
@@ -59,6 +69,7 @@ class _CollectionPageState extends State<CollectionPage> {
     _searchController.dispose();
     DatabaseHelper.instance.removeListener(_loadCollection);
     CollectionPage.searchRequest.removeListener(_onSearchRequest);
+    CollectionPage.itemDetailRequest.removeListener(_onItemDetailRequest);
     super.dispose();
   }
 
@@ -74,6 +85,21 @@ class _CollectionPageState extends State<CollectionPage> {
     _searchController.text = query;
     _searchController.addListener(_applyFilters);
     _applyFilters();
+  }
+
+  void _onItemDetailRequest() {
+    final itemId = CollectionPage.itemDetailRequest.value;
+    if (itemId == null || !mounted) return;
+    CollectionPage.itemDetailRequest.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => CollectionItemDetailPage(itemId: itemId),
+        ),
+      );
+    });
   }
 
   Future<void> _loadCollection() async {
