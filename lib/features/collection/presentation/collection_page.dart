@@ -57,6 +57,9 @@ class _CollectionPageState extends State<CollectionPage> {
     DatabaseHelper.instance.addListener(_loadCollection);
     CollectionPage.searchRequest.addListener(_onSearchRequest);
     CollectionPage.itemDetailRequest.addListener(_onItemDetailRequest);
+    if (CollectionPage.searchRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onSearchRequest());
+    }
     if (CollectionPage.itemDetailRequest.value != null) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _onItemDetailRequest(),

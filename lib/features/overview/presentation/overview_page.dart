@@ -33,7 +33,7 @@ class _OverviewPageState extends State<OverviewPage> {
   // ── Trending games (online / RAWG) ────────────────────────────────────────
   final http.Client _httpClient = http.Client();
   final RawgGamesApi _rawgApi = const RawgGamesApi();
-  List<RawgGame> _trendingGames = [];
+  List<RawgGame> _trendingRaw = [];
   bool _isLoadingTrending = true;
   bool _isSlowTrending = false;
   String? _trendingError;
@@ -94,15 +94,16 @@ class _OverviewPageState extends State<OverviewPage> {
     });
 
     try {
-      final page = await _rawgApi.fetchTopRatedGames(
+      final page = await _rawgApi.fetchGames(
         client: _httpClient,
         apiKey: _rawgApiKey,
-        pageSize: 12,
+        pageSize: 30,
+        activeQuery: '',
       );
       _slowConnectionTimer?.cancel();
       if (!mounted) return;
       setState(() {
-        _trendingGames = page.games
+        _trendingRaw = page.games
             .where((g) => g.coverUrl != null && g.coverUrl!.isNotEmpty)
             .toList();
         _isLoadingTrending = false;
@@ -127,6 +128,14 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   // ── Computed properties ───────────────────────────────────────────────────
+
+  List<RawgGame> get _trendingGames {
+    final ownedIds = _collectionItems.map((e) => e.apiId).toSet();
+    return _trendingRaw
+        .where((g) => !ownedIds.contains(g.id))
+        .take(11)
+        .toList(growable: false);
+  }
 
   int get _totalUniqueGames =>
       _collectionItems.map((e) => e.apiId).toSet().length;
@@ -369,36 +378,37 @@ class _OverviewPageState extends State<OverviewPage> {
 
             // ── Trending games (online) ───────────────────────────────────
             SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader(
-                    title: 'Trending games',
-                    actionLabel: (!_isLoadingTrending && _trendingError == null)
-                        ? 'Ontdekken'
-                        : null,
-                    onAction: () => OverviewPage.switchToTabRequest.value = 2,
-                  ),
-                  if (_isLoadingTrending)
-                    _HorizontalLoadingPlaceholder(
-                      showSlowMessage: _isSlowTrending,
-                    )
-                  else if (_trendingError != null)
-                    _SectionErrorCard(
-                      error: _trendingError!,
-                      onRetry: _fetchTrending,
-                    )
-                  else
-                    _HorizontalTrendingList(
-                      games: _trendingGames,
-                      onTap: _navigateToGame,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 107),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SectionHeader(
+                      title: 'Trending games',
+                      actionLabel:
+                          (!_isLoadingTrending && _trendingError == null)
+                          ? 'Ontdekken'
+                          : null,
+                      onAction: () => OverviewPage.switchToTabRequest.value = 2,
                     ),
-                ],
+                    if (_isLoadingTrending)
+                      _HorizontalLoadingPlaceholder(
+                        showSlowMessage: _isSlowTrending,
+                      )
+                    else if (_trendingError != null)
+                      _SectionErrorCard(
+                        error: _trendingError!,
+                        onRetry: _fetchTrending,
+                      )
+                    else
+                      _HorizontalTrendingList(
+                        games: _trendingGames,
+                        onTap: _navigateToGame,
+                      ),
+                  ],
+                ),
               ),
             ),
-
-            // Bottom padding for the nav bar
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
       ),
@@ -823,7 +833,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
             // Cover image with badge and title overlaid
             Expanded(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -1193,7 +1203,7 @@ class _TrendingGameCard extends StatelessWidget {
     return SizedBox(
       width: 128,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Stack(
           fit: StackFit.expand,
           children: [
