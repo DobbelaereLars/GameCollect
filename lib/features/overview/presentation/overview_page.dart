@@ -718,6 +718,15 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
   }
 
   @override
+  void didUpdateWidget(_CollectionGameCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.group.allItems.length != widget.group.allItems.length) {
+      _selectedIndex = _selectedIndex.clamp(0, _eligibleItems.length - 1);
+      _startCycleIfNeeded();
+    }
+  }
+
+  @override
   void dispose() {
     _cycleTimer?.cancel();
     super.dispose();
