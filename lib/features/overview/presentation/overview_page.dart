@@ -596,38 +596,32 @@ class _SectionErrorCard extends StatelessWidget {
     final isNetworkError = error == 'Controleer je internetverbinding';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppTheme.gray100),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isNetworkError ? LucideIcons.wifiOff : LucideIcons.triangleAlert,
-              size: 40,
-              color: AppTheme.orange500,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            isNetworkError ? LucideIcons.wifiOff : LucideIcons.triangleAlert,
+            size: 48,
+            color: AppTheme.orange500,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            error,
+            style: textTheme.bodyMedium?.copyWith(color: AppTheme.black),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: onRetry,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.orange500,
+              side: const BorderSide(color: AppTheme.orange500),
             ),
-            const SizedBox(height: 12),
-            Text(
-              error,
-              style: textTheme.bodyMedium?.copyWith(color: AppTheme.black),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: onRetry,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.orange500,
-                side: const BorderSide(color: AppTheme.orange500),
-              ),
-              child: const Text('Opnieuw proberen'),
-            ),
-          ],
-        ),
+            child: const Text('Opnieuw proberen'),
+          ),
+        ],
       ),
     );
   }
