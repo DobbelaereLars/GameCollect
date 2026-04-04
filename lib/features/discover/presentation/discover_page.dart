@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gamecollect/features/discover/presentation/widgets/custom_lens_upload_view.dart';
-import 'dart:io';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/rawg_games_api.dart';
@@ -18,6 +17,13 @@ import 'widgets/discover_search_bar.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
+
+  /// Set this to request that the Ontdekken tab opens and pushes the given game.
+  /// The shell listens to switch tabs; DiscoverPage listens to push the detail page.
+  static final gameDetailRequest =
+      ValueNotifier<
+        ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
+      >(null);
 
   @override
   State<DiscoverPage> createState() => _DiscoverPageState();
@@ -60,7 +66,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    DiscoverPage.gameDetailRequest.addListener(_onGameDetailRequest);
     _fetchGames(reset: true);
+    // Handle requests that arrived before this page was first built
+    if (DiscoverPage.gameDetailRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onGameDetailRequest(),
+      );
+    }
   }
 
   @override
@@ -70,7 +83,29 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _searchController.dispose();
     _scrollController.dispose();
     _httpClient.close();
+    DiscoverPage.gameDetailRequest.removeListener(_onGameDetailRequest);
     super.dispose();
+  }
+
+  void _onGameDetailRequest() {
+    final request = DiscoverPage.gameDetailRequest.value;
+    if (request == null || !mounted) return;
+    DiscoverPage.gameDetailRequest.value = null;
+    // Defer push so the tab switch has completed rendering first
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Pop any stale detail page so there's never more than one back press
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => GameDetailPage(
+            gameId: request.gameId,
+            fallbackTitle: request.fallbackTitle,
+            fallbackCoverUrl: request.fallbackCoverUrl,
+          ),
+        ),
+      );
+    });
   }
 
   void _onScroll() {
@@ -579,13 +614,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       : Image.network(
                           game.coverUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              LucideIcons.gamepad2,
-                              size: 34,
-                              color: AppTheme.black,
-                            );
-                          },
+                          errorBuilder: (_, __, ___) => const Icon(
+                            LucideIcons.gamepad2,
+                            size: 34,
+                            color: AppTheme.black,
+                          ),
                         ),
                 ),
                 Positioned(

@@ -1,10 +1,1112 @@
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/database/database_helper.dart';
+import '../domain/collection_item.dart';
+import 'collection_item_detail_page.dart';
+import 'widgets/add_platform_sheet.dart';
+import '../../discover/presentation/widgets/discover_search_bar.dart';
 
-class CollectionPage extends StatelessWidget {
+class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key});
+
+  /// Set this to a game title to pre-fill the search bar and clear filters.
+  /// The shell observes this to switch to the collection tab automatically.
+  static final searchRequest = ValueNotifier<String?>(null);
+
+  @override
+  State<CollectionPage> createState() => _CollectionPageState();
+}
+
+class _CollectionPageState extends State<CollectionPage> {
+  final TextEditingController _searchController = TextEditingController();
+  List<CollectionItem> _allItems = [];
+  List<CollectionItem> _filteredItems = [];
+  bool _isLoading = true;
+
+  // Filters
+  Set<String> _selectedFormats = {};
+  Set<String> _selectedPlatforms = {};
+
+  // Temporary filters for the filter sheet
+  late Set<String> _tempFormats = {};
+  late Set<String> _tempPlatforms = {};
+
+  List<String> get _availablePlatforms {
+    final platforms = <String>{};
+    for (final item in _allItems) {
+      for (final p in item.selectedPlatforms) {
+        platforms.add(p.replaceAll(RegExp(r' \(.*\)$'), ''));
+      }
+    }
+    final sorted = platforms.toList()..sort();
+    return sorted;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCollection();
+    _searchController.addListener(_applyFilters);
+    DatabaseHelper.instance.addListener(_loadCollection);
+    CollectionPage.searchRequest.addListener(_onSearchRequest);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    DatabaseHelper.instance.removeListener(_loadCollection);
+    CollectionPage.searchRequest.removeListener(_onSearchRequest);
+    super.dispose();
+  }
+
+  void _onSearchRequest() {
+    final query = CollectionPage.searchRequest.value;
+    if (query == null) return;
+    CollectionPage.searchRequest.value = null;
+    // Pop any detail/settings/notes pages open on this tab's navigator
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    _selectedFormats = {};
+    _selectedPlatforms = {};
+    _searchController.removeListener(_applyFilters);
+    _searchController.text = query;
+    _searchController.addListener(_applyFilters);
+    _applyFilters();
+  }
+
+  Future<void> _loadCollection() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final items = await DatabaseHelper.instance.getCollectionItems();
+
+    setState(() {
+      _allItems = items;
+      _isLoading = false;
+      _applyFilters();
+    });
+  }
+
+  void _applyFilters() {
+    final query = _searchController.text.toLowerCase();
+
+    setState(() {
+      _filteredItems = _allItems.where((item) {
+        // Text search
+        final matchesQuery = item.title.toLowerCase().contains(query);
+
+        // Check if at least one platform matches both filters
+        bool matchesAnyPlatform = false;
+
+        if (_selectedFormats.isEmpty && _selectedPlatforms.isEmpty) {
+          matchesAnyPlatform = true;
+        } else {
+          for (final p in item.selectedPlatforms) {
+            final cleanPlatform = p.replaceAll(RegExp(r' \(.*\)$'), '');
+
+            String specificFormat = "Fysiek & Digitaal";
+            final formatMatch = RegExp(r"\((.*?)\)$").firstMatch(p);
+            if (formatMatch != null) {
+              specificFormat = formatMatch.group(1) ?? "Fysiek & Digitaal";
+            }
+            if (specificFormat == 'Allebei') {
+              specificFormat = 'Fysiek & Digitaal';
+            }
+
+            bool pMatchesFormat = true;
+            if (_selectedFormats.isNotEmpty) {
+              pMatchesFormat = _selectedFormats.contains(specificFormat);
+            }
+
+            bool pMatchesPlatform = true;
+            if (_selectedPlatforms.isNotEmpty) {
+              pMatchesPlatform = _selectedPlatforms.contains(cleanPlatform);
+            }
+
+            if (pMatchesFormat && pMatchesPlatform) {
+              matchesAnyPlatform = true;
+              break;
+            }
+          }
+        }
+
+        return matchesQuery && matchesAnyPlatform;
+      }).toList();
+    });
+  }
+
+  void _showFilterBottomSheet() {
+    // Initialize temp filters with current values
+    _tempFormats = Set.from(_selectedFormats);
+    _tempPlatforms = Set.from(_selectedPlatforms);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final textTheme = Theme.of(context).textTheme;
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Filters',
+                          style: textTheme.titleLarge?.copyWith(
+                            color: AppTheme.black,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_selectedFormats.isNotEmpty ||
+                                _selectedPlatforms.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedFormats.clear();
+                                    _selectedPlatforms.clear();
+                                  });
+                                  _applyFilters();
+                                  Navigator.of(context).pop();
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.orange500,
+                                ),
+                                child: const Text('Filters wissen'),
+                              ),
+                            IconButton(
+                              icon: const Icon(
+                                LucideIcons.x,
+                                color: AppTheme.black,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Text(
+                      'Formaat',
+                      style: textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 0,
+                      children: ['Fysiek', 'Digitaal', 'Fysiek & Digitaal'].map(
+                        (format) {
+                          final isSelected = _tempFormats.contains(format);
+                          return FilterChip(
+                            showCheckmark: false,
+                            label: Text(format),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setSheetState(() {
+                                if (selected) {
+                                  _tempFormats.add(format);
+                                } else {
+                                  _tempFormats.remove(format);
+                                }
+                              });
+                            },
+                            selectedColor: AppTheme.orange500,
+                            checkmarkColor: AppTheme.white,
+                            labelStyle: textTheme.bodySmall?.copyWith(
+                              color: isSelected
+                                  ? AppTheme.white
+                                  : AppTheme.black,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            backgroundColor: AppTheme.white,
+                            shape: StadiumBorder(
+                              side: BorderSide(
+                                color: isSelected
+                                    ? AppTheme.orange500
+                                    : AppTheme.orange100,
+                              ),
+                            ),
+                          );
+                        },
+                      ).toList(),
+                    ),
+
+                    const SizedBox(height: 24),
+                    Text(
+                      'Platform(s)',
+                      style: textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_availablePlatforms.isEmpty)
+                      Text(
+                        'Geen platformen gevonden.',
+                        style: textTheme.bodySmall,
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 0,
+                        children: _availablePlatforms.map((platform) {
+                          final isSelected = _tempPlatforms.contains(platform);
+                          return FilterChip(
+                            showCheckmark: false,
+                            label: Text(platform),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setSheetState(() {
+                                if (selected) {
+                                  _tempPlatforms.add(platform);
+                                } else {
+                                  _tempPlatforms.remove(platform);
+                                }
+                              });
+                            },
+                            selectedColor: AppTheme.orange500,
+                            checkmarkColor: AppTheme.white,
+                            labelStyle: textTheme.bodySmall?.copyWith(
+                              color: isSelected
+                                  ? AppTheme.white
+                                  : AppTheme.black,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            backgroundColor: AppTheme.white,
+                            shape: StadiumBorder(
+                              side: BorderSide(
+                                color: isSelected
+                                    ? AppTheme.orange500
+                                    : AppTheme.orange100,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedFormats = _tempFormats;
+                            _selectedPlatforms = _tempPlatforms;
+                          });
+                          _applyFilters();
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.orange500,
+                          foregroundColor: AppTheme.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Toepassen',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.expand();
+    return Scaffold(
+      backgroundColor: AppTheme.white,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Glass effect search bar area
+            if (_isLoading || _allItems.isNotEmpty)
+              BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(
+                  color: AppTheme.glassLight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DiscoverSearchBar(
+                                controller: _searchController,
+                                onChanged: (val) => _applyFilters(),
+                                onSubmitted: (_) {},
+                                onClearPressed: () {
+                                  _searchController.clear();
+                                  FocusScope.of(context).unfocus();
+                                },
+                                showCameraButton: false,
+                                onCameraPressed: () {},
+                                isCameraBusy: false,
+                                isCameraDisabled: false,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            IconButton(
+                              icon: Stack(
+                                children: [
+                                  const Icon(
+                                    LucideIcons.listFilter,
+                                    color: AppTheme.orange500,
+                                  ),
+                                  if (_selectedFormats.isNotEmpty ||
+                                      _selectedPlatforms.isNotEmpty)
+                                    Positioned(
+                                      right: 0,
+                                      top: 0,
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.orange500,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: AppTheme.white,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              onPressed: _showFilterBottomSheet,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            // Content
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.orange500),
+      );
+    }
+
+    if (_allItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              LucideIcons.library,
+              size: 64,
+              color: AppTheme.orange500,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Je collectie is nog leeg.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: AppTheme.gray700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Voeg games toe via de Ontdekken pagina',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppTheme.gray500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Map<String, List<CollectionItem>> groupedItems = {};
+    for (final item in _filteredItems) {
+      for (final platformWithFormat in item.selectedPlatforms) {
+        final platformNameMatch = RegExp(
+          r"^(.*?)(?:\s*\([^)]*\))?$",
+        ).firstMatch(platformWithFormat);
+        final platform =
+            platformNameMatch?.group(1)?.trim() ?? "Onbekend Platform";
+
+        String specificFormat = "Fysiek & Digitaal";
+        final formatMatch = RegExp(
+          r"\((.*?)\)$",
+        ).firstMatch(platformWithFormat);
+        if (formatMatch != null) {
+          specificFormat = formatMatch.group(1) ?? "Fysiek & Digitaal";
+        }
+        if (specificFormat == 'Allebei') {
+          specificFormat = 'Fysiek & Digitaal';
+        }
+
+        // Apply filters to this specific platform occurrence
+        if (_selectedPlatforms.isNotEmpty &&
+            !_selectedPlatforms.contains(platform)) {
+          continue;
+        }
+
+        if (_selectedFormats.isNotEmpty) {
+          if (!_selectedFormats.contains(specificFormat)) {
+            continue; // Exclude this platform instance since it doesn't match the selected format
+          }
+        }
+
+        if (!groupedItems.containsKey(platform)) {
+          groupedItems[platform] = [];
+        }
+        if (!groupedItems[platform]!.contains(item)) {
+          groupedItems[platform]!.add(item);
+        }
+      }
+    }
+
+    if (groupedItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              LucideIcons.searchX,
+              size: 64,
+              color: AppTheme.orange500,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Geen resultaten voor deze filters.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: AppTheme.gray700),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final sortedPlatforms = groupedItems.keys.toList()..sort();
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 90),
+      itemCount: sortedPlatforms.length,
+      itemBuilder: (context, index) {
+        final platform = sortedPlatforms[index];
+        final items = groupedItems[platform]!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: index == 0 ? 0 : 16.0, bottom: 8.0),
+              child: Text(
+                platform,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.gray500,
+                  fontFamily: 'Manrope',
+                ),
+              ),
+            ),
+            ...items.map((item) {
+              final platformString = item.selectedPlatforms.firstWhere(
+                (p) => p.startsWith(platform),
+                orElse: () => "$platform (Fysiek & Digitaal)",
+              );
+
+              String specificFormat = "Fysiek & Digitaal";
+              final formatMatch = RegExp(
+                r"\((.*?)\)$",
+              ).firstMatch(platformString);
+              if (formatMatch != null) {
+                specificFormat = formatMatch.group(1) ?? "Fysiek & Digitaal";
+              }
+              if (specificFormat == 'Allebei') {
+                specificFormat = 'Fysiek & Digitaal';
+              }
+
+              IconData formatIcon;
+              if (specificFormat == 'Fysiek') {
+                formatIcon = LucideIcons.disc;
+              } else if (specificFormat == 'Digitaal') {
+                formatIcon = LucideIcons.download;
+              } else {
+                formatIcon = LucideIcons.layers;
+              }
+
+              return _buildCollectionCard(
+                context: context,
+                item: item,
+                specificFormat: specificFormat,
+                formatIcon: formatIcon,
+                platform: platform,
+                platformString: platformString,
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCollectionCard({
+    required BuildContext context,
+    required CollectionItem item,
+    required String specificFormat,
+    required IconData formatIcon,
+    required String platform,
+    required String platformString,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: AppTheme.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppTheme.gray100),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: item.id == null
+            ? null
+            : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+                  ),
+                );
+              },
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cover image fills card height
+              ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(16),
+                ),
+                child: SizedBox(
+                  width: 100,
+                  child: item.customCoverPath != null
+                      ? Image.file(
+                          File(item.customCoverPath!),
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                        )
+                      : (item.coverUrl != null
+                            ? Image.network(
+                                item.coverUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(),
+                              )
+                            : _buildPlaceholder()),
+                ),
+              ),
+              // Meta data
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.black,
+                              height: 1.2,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.orange50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              formatIcon,
+                              size: 12,
+                              color: AppTheme.orange500,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              specificFormat,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: AppTheme.orange700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (item.publisher != null && item.publisher!.isNotEmpty)
+                        Row(
+                          children: [
+                            const Icon(
+                              LucideIcons.building,
+                              size: 14,
+                              color: AppTheme.gray500,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                item.publisher!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.gray500,
+                                      fontSize: 12,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: LinearProgressIndicator(
+                              value: item.progressRatio,
+                              minHeight: 6,
+                              borderRadius: BorderRadius.circular(999),
+                              backgroundColor: AppTheme.orange100,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                AppTheme.orange500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${(item.progressRatio * 100).round()}%',
+                            style: const TextStyle(
+                              fontFamily: 'Manrope',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              height: 1.4,
+                              color: AppTheme.gray500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildCardTagsRow(item),
+                    ],
+                  ),
+                ),
+              ),
+              // Action menu
+              IconButton(
+                icon: const Icon(
+                  LucideIcons.ellipsisVertical,
+                  size: 20,
+                  color: AppTheme.gray500,
+                ),
+                onPressed: () => _showItemOptions(
+                  item,
+                  specificPlatform: platform,
+                  specificPlatformWithFormat: platformString,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: AppTheme.orange50,
+      child: const Center(
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 34),
+      ),
+    );
+  }
+
+  Widget _buildCardTagsRow(CollectionItem item) {
+    final previewTags = item.activeTags.take(3).toList(growable: false);
+    final remainingCount = item.activeTags.length - previewTags.length;
+
+    if (previewTags.isEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: item.id == null
+            ? null
+            : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(
+                      itemId: item.id!,
+                      openTagsOnStart: true,
+                    ),
+                  ),
+                );
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(LucideIcons.plus, size: 14, color: AppTheme.orange500),
+              SizedBox(width: 4),
+              Text(
+                'Tags toevoegen',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 24,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ...previewTags.map((tag) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.orange100),
+                  ),
+                  child: Text(
+                    tag,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                ),
+              );
+            }),
+            if (remainingCount > 0)
+              Text(
+                '+$remainingCount meer',
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange700,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showItemOptions(
+    CollectionItem item, {
+    required String specificPlatform,
+    required String specificPlatformWithFormat,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final sameGameCount = await DatabaseHelper.instance
+        .countCollectionItemsByApiId(item.apiId);
+    if (!mounted) {
+      return;
+    }
+
+    final hasMultipleGameEntries = sameGameCount > 1;
+
+    // Determine unowned platforms
+    final allItems = await DatabaseHelper.instance.getCollectionItemsByApiId(
+      item.apiId,
+    );
+    final usedNames = <String>{};
+    for (final it in allItems) {
+      for (final p in it.selectedPlatforms) {
+        final name = p.replaceAll(RegExp(r' \(.*\)$'), '');
+        if (name.isNotEmpty) usedNames.add(name);
+      }
+    }
+    final unownedPlatforms = item.availablePlatforms
+        .where((p) => !usedNames.contains(p))
+        .toList();
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (unownedPlatforms.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(
+                      LucideIcons.circlePlus,
+                      color: AppTheme.orange500,
+                    ),
+                    title: Text(
+                      'Toevoegen aan ander platform',
+                      style: const TextStyle(color: AppTheme.orange500),
+                    ),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await AddPlatformSheet.show(
+                        context,
+                        item: item,
+                        unownedPlatforms: unownedPlatforms,
+                        onAdded: _loadCollection,
+                      );
+                    },
+                  ),
+                ListTile(
+                  leading: Icon(
+                    hasMultipleGameEntries
+                        ? LucideIcons.minus
+                        : LucideIcons.trash2,
+                    color: Colors.red,
+                  ),
+                  title: Text(
+                    'Verwijder "${item.title}" van $specificPlatform',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                  onTap: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _showDeleteConfirmSheet(
+                      title: '${item.title} verwijderen?',
+                      description: hasMultipleGameEntries
+                          ? 'De game wordt verwijderd van $specificPlatform. Al je voortgang, speelduur en instellingen voor dit platform gaan permanent verloren.'
+                          : 'De game wordt volledig verwijderd uit je collectie. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
+                      buttonLabel: 'Verwijderen',
+                      onConfirm: () async {
+                        if (item.id != null) {
+                          final updatedPlatforms = List<String>.from(
+                            item.selectedPlatforms,
+                          )..remove(specificPlatformWithFormat);
+
+                          if (updatedPlatforms.isEmpty) {
+                            await DatabaseHelper.instance.deleteCollectionItem(
+                              item.id!,
+                            );
+                          } else {
+                            await DatabaseHelper.instance.updateCollectionItem(
+                              item.copyWith(
+                                selectedPlatforms: updatedPlatforms,
+                              ),
+                            );
+                          }
+
+                          _loadCollection();
+                          if (mounted) {
+                            messenger
+                              ..removeCurrentSnackBar()
+                              ..showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '"${item.title}" verwijderd van $specificPlatform.',
+                                  ),
+                                ),
+                              );
+                          }
+                        }
+                      },
+                    );
+                  },
+                ),
+                if (hasMultipleGameEntries)
+                  ListTile(
+                    leading: const Icon(LucideIcons.trash2, color: Colors.red),
+                    title: Text(
+                      'Verwijder "${item.title}" van elk platform',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _showDeleteConfirmSheet(
+                        title: '${item.title} volledig verwijderen?',
+                        description:
+                            'De game wordt van elk platform verwijderd. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
+                        buttonLabel: 'Volledig verwijderen',
+                        onConfirm: () async {
+                          await DatabaseHelper.instance
+                              .deleteCollectionItemsByApiId(item.apiId);
+                          _loadCollection();
+                          if (mounted) {
+                            messenger
+                              ..removeCurrentSnackBar()
+                              ..showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '"${item.title}" volledig verwijderd uit je collectie.',
+                                  ),
+                                ),
+                              );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteConfirmSheet({
+    required String title,
+    required String description,
+    required String buttonLabel,
+    required Future<void> Function() onConfirm,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  await onConfirm();
+                },
+                icon: const Icon(LucideIcons.trash2, size: 18),
+                label: Text(
+                  buttonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

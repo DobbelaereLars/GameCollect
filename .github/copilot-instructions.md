@@ -146,3 +146,21 @@ Hanteer bij alle API-calls en dataloads in de app dezelfde patronen voor trage o
    - Als er al resultaten op het scherm staan en een volgende 'loadMore' badge faalt wegens geen internet, gooi dan de reeds bestaande data **nooit** weg.
    - Laat de status op laden staan (`isLoadingMore = true`), zodat de spinner onderaan de grid/lijst blijft draaien.
    - Vang de netwerkfout af en schiet een automatische the-retry-loop in de achtergrond af (bijv. via `Future.delayed(const Duration(seconds: 3))` die de ophaal-functie voor de volgende pagina opnieuw aanroept totdat de verbinding weer hersteld is). Valt de UI dus niet onnodig lastig met pop-ups tijdens het bijladen.
+
+## Dialogs / Modals (Standaardisatie)
+
+Gebruik voor **alle** `AlertDialog` en `Dialog` widgets dezelfde border radius als de camera-zoekdialog:
+
+- `BorderRadius.circular(16)`
+
+Stel dit altijd expliciet in via de `shape`-property:
+
+```dart
+AlertDialog(
+  backgroundColor: AppTheme.white,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(16),
+  ),
+  ...
+)
+```

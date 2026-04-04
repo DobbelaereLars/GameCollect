@@ -103,10 +103,7 @@ class DiscoverSearchBar extends StatelessWidget {
                       color: AppTheme.orange500,
                     ),
                   )
-                : const Icon(
-                    LucideIcons.camera,
-                    color: AppTheme.orange500,
-                  ),
+                : const Icon(LucideIcons.camera, color: AppTheme.orange500),
           ),
         ],
       ],
