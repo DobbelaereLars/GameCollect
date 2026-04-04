@@ -133,7 +133,7 @@ class _OverviewPageState extends State<OverviewPage> {
     final ownedIds = _collectionItems.map((e) => e.apiId).toSet();
     return _trendingRaw
         .where((g) => !ownedIds.contains(g.id))
-        .take(11)
+        .take(10)
         .toList(growable: false);
   }
 
