@@ -159,6 +159,33 @@ class _PlaytimePageState extends State<PlaytimePage> {
 
     final messenger = ScaffoldMessenger.of(context);
     final now = DateTime.now();
+    final todayKey = _toDateKey(now);
+    final alreadyToday = _entries
+        .where((e) => e.date == todayKey)
+        .fold(0, (s, e) => s + e.minutes);
+    if (alreadyToday + total > 1440) {
+      final remaining = 1440 - alreadyToday;
+      if (remaining <= 0) {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Je hebt vandaag al 24u speelduur bereikt.'),
+            ),
+          );
+      } else {
+        messenger
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                'Dagelijks maximum overschreden. Je kan nog ${_formatMinutesLong(remaining)} toevoegen vandaag.',
+              ),
+            ),
+          );
+      }
+      return;
+    }
     final newEntry = PlaytimeEntry(
       id: now.microsecondsSinceEpoch.toString(),
       date: _toDateKey(now),
@@ -676,12 +703,16 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
   int _minutes = 0;
   bool _isSaving = false;
 
-  bool get _canSave => (_hours > 0 || _minutes > 0) && !_isSaving;
+  bool get _canSave =>
+      (_hours > 0 || _minutes > 0) &&
+      (_hours * 60 + _minutes <= 1440) &&
+      !_isSaving;
 
   void _increment(bool isHours) {
     setState(() {
       if (isHours) {
-        _hours = (_hours + 1).clamp(0, 23);
+        _hours = (_hours + 1).clamp(0, 24);
+        if (_hours == 24) _minutes = 0;
       } else {
         _minutes = (_minutes + 5).clamp(0, 55);
       }
@@ -691,7 +722,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
   void _decrement(bool isHours) {
     setState(() {
       if (isHours) {
-        _hours = (_hours - 1).clamp(0, 23);
+        _hours = (_hours - 1).clamp(0, 24);
       } else {
         _minutes = (_minutes - 5).clamp(0, 55);
       }
@@ -763,7 +794,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
                   onIncrement: () => _increment(true),
                   onDecrement: () => _decrement(true),
                   canDecrement: _hours > 0,
-                  canIncrement: _hours < 23,
+                  canIncrement: _hours < 24,
                 ),
               ),
               const SizedBox(width: 16),
@@ -774,8 +805,8 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
                   displayValue: _minutes.toString().padLeft(2, '0'),
                   onIncrement: () => _increment(false),
                   onDecrement: () => _decrement(false),
-                  canDecrement: _minutes > 0,
-                  canIncrement: _minutes < 55,
+                  canDecrement: _minutes > 0 && _hours < 24,
+                  canIncrement: _minutes < 55 && _hours < 24,
                 ),
               ),
             ],
