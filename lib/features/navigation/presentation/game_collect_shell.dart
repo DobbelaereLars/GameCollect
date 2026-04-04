@@ -10,13 +10,15 @@ import '../domain/navigation_tab.dart';
 import 'widgets/app_bottom_navigation.dart';
 
 class _TabNavigator extends StatelessWidget {
-  const _TabNavigator({required this.child});
+  const _TabNavigator({required this.child, this.navigatorKey});
 
   final Widget child;
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   Widget build(BuildContext context) {
     return Navigator(
+      key: navigatorKey,
       onGenerateRoute: (settings) {
         return MaterialPageRoute(builder: (context) => child);
       },
@@ -54,6 +56,8 @@ class GameCollectShell extends StatefulWidget {
 class _GameCollectShellState extends State<GameCollectShell> {
   int _currentIndex = 0;
   late final PageController _pageController = PageController();
+  final _collectionNavKey = GlobalKey<NavigatorState>();
+  final _discoverNavKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -102,6 +106,11 @@ class _GameCollectShellState extends State<GameCollectShell> {
     final index = OverviewPage.switchToTabRequest.value;
     if (index != null) {
       OverviewPage.switchToTabRequest.value = null;
+      if (index == 1) {
+        _collectionNavKey.currentState?.popUntil((r) => r.isFirst);
+      } else if (index == 2) {
+        _discoverNavKey.currentState?.popUntil((r) => r.isFirst);
+      }
       _switchToTabAnimated(index);
     }
   }
@@ -126,15 +135,21 @@ class _GameCollectShellState extends State<GameCollectShell> {
       icon: LucideIcons.house,
       page: _TabNavigator(child: OverviewPage()),
     ),
-    const NavigationTab(
+    NavigationTab(
       label: 'Collectie',
       icon: LucideIcons.library,
-      page: _TabNavigator(child: CollectionPage()),
+      page: _TabNavigator(
+        navigatorKey: _collectionNavKey,
+        child: const CollectionPage(),
+      ),
     ),
-    const NavigationTab(
+    NavigationTab(
       label: 'Ontdekken',
       icon: LucideIcons.search,
-      page: _TabNavigator(child: DiscoverPage()),
+      page: _TabNavigator(
+        navigatorKey: _discoverNavKey,
+        child: const DiscoverPage(),
+      ),
     ),
     const NavigationTab(
       label: 'Voortgang',
