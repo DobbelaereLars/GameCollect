@@ -23,7 +23,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -65,6 +65,19 @@ CREATE TABLE game_achievements (
   imageUrl TEXT,
   percent REAL,
   UNIQUE(apiId, rawgId)
+)
+''');
+    await db.execute('''
+CREATE TABLE app_achievements (
+  id TEXT PRIMARY KEY,
+  unlockedAt TEXT,
+  seenAt TEXT
+)
+''');
+    await db.execute('''
+CREATE TABLE event_counters (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
 )
 ''');
   }
@@ -143,6 +156,21 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       await db.execute(
         "ALTER TABLE collection ADD COLUMN availablePlatforms TEXT NOT NULL DEFAULT '[]'",
       );
+    }
+    if (oldVersion < 9) {
+      await db.execute('''
+CREATE TABLE IF NOT EXISTS app_achievements (
+  id TEXT PRIMARY KEY,
+  unlockedAt TEXT,
+  seenAt TEXT
+)
+''');
+      await db.execute('''
+CREATE TABLE IF NOT EXISTS event_counters (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
+)
+''');
     }
   }
 
@@ -350,5 +378,65 @@ CREATE TABLE IF NOT EXISTS game_achievements (
           );
         })
         .toList(growable: false);
+  }
+
+  // ── App-level Achievements DAO ────────────────────────────────────────────
+
+  /// Returns a map of achievement id -> {unlockedAt, seenAt} for all rows
+  /// stored in the app_achievements table.
+  Future<Map<String, Map<String, String?>>> getAppAchievements() async {
+    final db = await instance.database;
+    final rows = await db.query('app_achievements');
+    return {
+      for (final row in rows)
+        row['id'] as String: {
+          'unlockedAt': row['unlockedAt'] as String?,
+          'seenAt': row['seenAt'] as String?,
+        },
+    };
+  }
+
+  /// Marks an app-level achievement as unlocked (no-op if already unlocked).
+  Future<void> unlockAppAchievement(String id) async {
+    final db = await instance.database;
+    await db.insert('app_achievements', {
+      'id': id,
+      'unlockedAt': DateTime.now().toIso8601String(),
+      'seenAt': null,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  /// Marks a previously unlocked achievement as "seen" by the user.
+  Future<void> markAppAchievementSeen(String id) async {
+    final db = await instance.database;
+    await db.update(
+      'app_achievements',
+      {'seenAt': DateTime.now().toIso8601String()},
+      where: 'id = ? AND seenAt IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  /// Returns the current value of an event counter (0 if not present).
+  Future<int> getEventCounter(String key) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'event_counters',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return 0;
+    return rows.first['value'] as int? ?? 0;
+  }
+
+  /// Increments an event counter by 1, inserting with value 1 if not present.
+  Future<void> incrementEventCounter(String key) async {
+    final db = await instance.database;
+    await db.execute(
+      'INSERT INTO event_counters (key, value) VALUES (?, 1) '
+      'ON CONFLICT(key) DO UPDATE SET value = value + 1',
+      [key],
+    );
   }
 }

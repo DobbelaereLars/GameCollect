@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
+import '../../achievements/data/app_achievement_service.dart';
 import '../../discover/data/rawg_games_api.dart';
 import '../../discover/presentation/discover_page.dart';
 import 'disabled_achievements_page.dart';
@@ -1055,6 +1056,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
 
     try {
       await SharePlus.instance.share(ShareParams(text: text));
+      final allItems = await DatabaseHelper.instance.getCollectionItems();
+      await AppAchievementService.instance.recordShareEvent(allItems);
     } catch (_) {}
   }
 
