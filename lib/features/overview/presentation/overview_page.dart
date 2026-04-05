@@ -236,6 +236,7 @@ class _OverviewPageState extends State<OverviewPage> {
 
   String _greeting() {
     final hour = DateTime.now().hour;
+    if (hour < 6) return 'Goedenacht';
     if (hour < 12) return 'Goedemorgen';
     if (hour < 18) return 'Goedemiddag';
     return 'Goedenavond';
