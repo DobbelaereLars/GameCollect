@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -61,6 +63,7 @@ class _GameCollectShellState extends State<GameCollectShell> {
   late final PageController _pageController = PageController();
   final _collectionNavKey = GlobalKey<NavigatorState>();
   final _discoverNavKey = GlobalKey<NavigatorState>();
+  Timer? _achievementDebounce;
 
   @override
   void initState() {
@@ -91,13 +94,17 @@ class _GameCollectShellState extends State<GameCollectShell> {
     AppAchievementService.newlyUnlockedNotifier.removeListener(
       _onAchievementsUnlocked,
     );
+    _achievementDebounce?.cancel();
     _pageController.dispose();
     super.dispose();
   }
 
-  Future<void> _onCollectionChangedForAchievements() async {
-    final items = await DatabaseHelper.instance.getCollectionItems();
-    await AppAchievementService.instance.checkAndUnlock(items);
+  void _onCollectionChangedForAchievements() {
+    _achievementDebounce?.cancel();
+    _achievementDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final items = await DatabaseHelper.instance.getCollectionItems();
+      await AppAchievementService.instance.checkAndUnlock(items);
+    });
   }
 
   void _onAchievementsUnlocked() {
