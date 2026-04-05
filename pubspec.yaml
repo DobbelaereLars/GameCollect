@@ -1,7 +1,7 @@
-name: gamecollect
+name: GameCollect
 description: 'GameCollect is een Flutter-app waarmee gebruikers hun fysieke en digitale gamecollectie kunnen beheren, organiseren en opvolgen. De app focust op een overzichtelijke covergrid, backlog-status, persoonlijke tags en het bijhouden van voortgang richting het uitspelen of 100% completen van games.'
 publish_to: 'none'
-version: 0.1.0
+version: 0.9.0
 
 environment:
   sdk: ^3.10.8
@@ -18,6 +18,7 @@ dependencies:
   sqflite: ^2.4.2
   path: ^1.9.1
   share_plus: ^12.0.2
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

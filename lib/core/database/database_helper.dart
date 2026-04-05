@@ -11,6 +11,12 @@ class DatabaseHelper extends ChangeNotifier {
 
   DatabaseHelper._init();
 
+  /// Clears the cached database reference so the next access re-opens it.
+  /// Call this before deleting the database file during an app reset.
+  static void resetInstance() {
+    _database = null;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('gamecollect.db');
