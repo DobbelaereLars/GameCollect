@@ -16,6 +16,7 @@ class AchievementsPage extends StatefulWidget {
 class _AchievementsPageState extends State<AchievementsPage> {
   List<AppAchievementProgress> _progress = [];
   bool _isLoading = true;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -42,11 +43,12 @@ class _AchievementsPageState extends State<AchievementsPage> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     final items = await DatabaseHelper.instance.getCollectionItems();
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
 
     final progress = await AppAchievementService.instance.getProgress(items);
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
 
     // Mark newly seen achievements as seen when user opens this page
     if (_progress.isEmpty || progress.any((p) => p.isNew)) {
@@ -57,7 +59,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
 
     // Reload after marking seen so the "Nieuw" badges disappear
     final refreshed = await AppAchievementService.instance.getProgress(items);
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
 
     setState(() {
       _progress = refreshed;

@@ -23,9 +23,9 @@ class AppAchievementService extends ChangeNotifier {
     final uniqueApiIds = items.map((e) => e.apiId).toSet();
     final totalGames = uniqueApiIds.length;
 
-    // Physical games: unique apiIds where any entry is 'Fysiek' or 'Allebei'
+    // Physical games: unique apiIds where any entry is 'Fysiek' or 'Fysiek & Digitaal'
     final physicalApiIds = items
-        .where((e) => e.format == 'Fysiek' || e.format == 'Allebei')
+        .where((e) => e.format == 'Fysiek' || e.format == 'Fysiek & Digitaal')
         .map((e) => e.apiId)
         .toSet();
     final physicalGames = physicalApiIds.length;
@@ -56,13 +56,33 @@ class AppAchievementService extends ChangeNotifier {
     }
     final platformCount = platforms.length;
 
-    // Notes written (at least 1 game with non-empty notes)
-    final notesWritten = items.any((e) => e.notes.trim().isNotEmpty) ? 1 : 0;
+    // Notes written: count of unique games with non-empty notes
+    final notesWrittenApiIds = items
+        .where((e) => e.notes.trim().isNotEmpty)
+        .map((e) => e.apiId)
+        .toSet();
+    final notesWritten = notesWrittenApiIds.length;
 
-    // Online achievements loaded (at least 1 game with achievementStates)
-    final onlineLoaded = items.any((e) => e.achievementStates.isNotEmpty)
-        ? 1
-        : 0;
+    // Online achievements loaded (count of games with achievementStates)
+    final onlineLoaded = items
+        .where((e) => e.achievementStates.isNotEmpty)
+        .map((e) => e.apiId)
+        .toSet()
+        .length;
+
+    // Digital games: unique apiIds where any entry is 'Digitaal' or 'Fysiek & Digitaal'
+    final digitalApiIds = items
+        .where((e) => e.format == 'Digitaal' || e.format == 'Fysiek & Digitaal')
+        .map((e) => e.apiId)
+        .toSet();
+    final digitalGames = digitalApiIds.length;
+
+    // Tags used: unique apiIds where any entry has at least one active tag
+    final taggedApiIds = items
+        .where((e) => e.activeTags.isNotEmpty)
+        .map((e) => e.apiId)
+        .toSet();
+    final tagsUsed = taggedApiIds.length;
 
     // Share count (from event counter)
     final shareCount = await DatabaseHelper.instance.getEventCounter(
@@ -72,12 +92,14 @@ class AppAchievementService extends ChangeNotifier {
     return {
       AchievementType.totalGames: totalGames,
       AchievementType.physicalGames: physicalGames,
+      AchievementType.digitalGames: digitalGames,
       AchievementType.completedGames: completedGames,
       AchievementType.playtimeMinutes: totalPlaytimeMinutes,
       AchievementType.platformCount: platformCount,
       AchievementType.notesWritten: notesWritten,
       AchievementType.shareCount: shareCount,
       AchievementType.onlineAchievementsLoaded: onlineLoaded,
+      AchievementType.tagsUsed: tagsUsed,
     };
   }
 

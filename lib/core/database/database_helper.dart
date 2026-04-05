@@ -317,6 +317,7 @@ CREATE TABLE IF NOT EXISTS event_counters (
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
+    notifyListeners();
   }
 
   Future<void> upsertAchievementsForGame(
@@ -337,6 +338,7 @@ CREATE TABLE IF NOT EXISTS event_counters (
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
+    notifyListeners();
   }
 
   Future<List<Map<String, dynamic>>> getRawAchievementsForGame(
@@ -438,5 +440,6 @@ CREATE TABLE IF NOT EXISTS event_counters (
       'ON CONFLICT(key) DO UPDATE SET value = value + 1',
       [key],
     );
+    notifyListeners();
   }
 }
