@@ -13,6 +13,7 @@ import '../../collection/presentation/collection_page.dart';
 import '../../discover/data/rawg_games_api.dart';
 import '../../discover/domain/rawg_game.dart';
 import '../../discover/presentation/discover_page.dart';
+import 'profile_page.dart';
 
 class OverviewPage extends StatefulWidget {
   const OverviewPage({super.key});
@@ -274,12 +275,36 @@ class _OverviewPageState extends State<OverviewPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _greeting(),
-                      style: textTheme.headlineMedium?.copyWith(
-                        color: AppTheme.black,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _greeting(),
+                            style: textTheme.headlineMedium?.copyWith(
+                              color: AppTheme.black,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const ProfilePage(),
+                              ),
+                            );
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Icon(
+                              LucideIcons.circleUser,
+                              size: 26,
+                              color: AppTheme.orange500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
