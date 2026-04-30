@@ -55,7 +55,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Vereiste verwijderen?',
                     style: TextStyle(
                       fontFamily: 'Manrope',
@@ -66,12 +66,12 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Deze vereiste wordt permanent verwijderd uit je collectie.',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -120,10 +120,10 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft, color: AppTheme.black),
+          icon: Icon(LucideIcons.chevronLeft, color: AppTheme.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
+        title: Text(
           'Niet meetellen',
           style: TextStyle(
             fontFamily: 'Manrope',
@@ -140,9 +140,9 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(LucideIcons.eye, size: 48, color: AppTheme.gray300),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Text(
                       'Geen verborgen vereisten.\nVereisten die je niet wil meetellen in je progressie vind je hier terug.',
                       textAlign: TextAlign.center,
@@ -162,7 +162,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               itemCount: _requirements.length,
               separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppTheme.gray100),
+                  Divider(height: 1, color: AppTheme.gray100),
               itemBuilder: (context, index) {
                 final req = _requirements[index];
                 final displayText = req.title?.isNotEmpty == true
@@ -189,7 +189,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                             });
                           },
                           activeColor: AppTheme.orange500,
-                          side: const BorderSide(color: AppTheme.gray300),
+                          side: BorderSide(color: AppTheme.gray300),
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
@@ -201,7 +201,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                           displayText,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Manrope',
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
@@ -230,7 +230,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
                       // Delete button
                       GestureDetector(
                         onTap: () => _confirmDelete(req.id),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.all(6),
                           child: Icon(
                             LucideIcons.trash2,
