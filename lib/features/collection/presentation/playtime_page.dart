@@ -267,7 +267,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
               widget.gameTitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
@@ -334,7 +334,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Totale speelduur',
                         style: TextStyle(
                           fontFamily: 'Manrope',
@@ -375,7 +375,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                     children: [
                       IconButton(
                         onPressed: () => setState(() => _weekOffset--),
-                        icon: const Icon(
+                        icon: Icon(
                           LucideIcons.chevronLeft,
                           size: 20,
                           color: AppTheme.black,
@@ -390,7 +390,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                         child: Center(
                           child: Text(
                             _weekRangeLabel(),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Manrope',
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -557,7 +557,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
 
             // ── History list ──────────────────────────────────────────────────
             if (_entries.isNotEmpty) ...[
-              const Text(
+              Text(
                 'Geschiedenis',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -572,7 +572,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                 color: AppTheme.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppTheme.gray100),
+                  side: BorderSide(color: AppTheme.gray100),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
@@ -680,8 +680,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
             ),
           ),
         ),
-        if (!isLast)
-          const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+        if (!isLast) Divider(height: 1, thickness: 1, color: AppTheme.gray100),
       ],
     );
   }
@@ -762,7 +761,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
               ),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                icon: Icon(LucideIcons.x, color: AppTheme.black),
               ),
             ],
           ),
@@ -773,7 +772,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
             alignment: Alignment.centerLeft,
             child: Text(
               'Wordt opgeslagen op vandaag, ${_todayLabel()}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
@@ -820,21 +819,21 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
             child: ElevatedButton.icon(
               onPressed: _canSave ? _handleSave : null,
               icon: _isSaving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppTheme.white,
+                        color: AppTheme.trueWhite,
                       ),
                     )
                   : const Icon(LucideIcons.save, size: 18),
               label: const Text('Opslaan'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.orange500,
-                foregroundColor: AppTheme.white,
+                foregroundColor: AppTheme.trueWhite,
                 disabledBackgroundColor: AppTheme.orange100,
-                disabledForegroundColor: AppTheme.white,
+                disabledForegroundColor: AppTheme.trueWhite,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 textStyle: const TextStyle(
                   fontFamily: 'Manrope',
@@ -865,7 +864,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Manrope',
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -892,7 +891,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
                 child: Text(
                   displayValue ?? '$value',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
@@ -1039,14 +1038,14 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(ctx).pop(false),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 'Verwijder de sessie van ${_formatDateLabel(entry.date)} om ${_formatTimeLabel(entry.addedAt)} (${_formatMinutesLong(entry.minutes)})?',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
@@ -1113,7 +1112,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
             icon: const Icon(LucideIcons.chevronLeft),
             onPressed: () => Navigator.of(context).pop(_entries),
           ),
-          title: const Text(
+          title: Text(
             'Geschiedenis',
             style: TextStyle(
               fontFamily: 'Manrope',
@@ -1126,7 +1125,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
         body: SafeArea(
           bottom: false,
           child: sorted.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'Geen sessies opgeslagen.',
                     style: TextStyle(
@@ -1149,13 +1148,13 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                       decoration: BoxDecoration(
                         color: AppTheme.white,
                         border: Border(
-                          left: const BorderSide(color: AppTheme.gray100),
-                          right: const BorderSide(color: AppTheme.gray100),
+                          left: BorderSide(color: AppTheme.gray100),
+                          right: BorderSide(color: AppTheme.gray100),
                           top: isFirst
-                              ? const BorderSide(color: AppTheme.gray100)
+                              ? BorderSide(color: AppTheme.gray100)
                               : BorderSide.none,
                           bottom: isLast
-                              ? const BorderSide(color: AppTheme.gray100)
+                              ? BorderSide(color: AppTheme.gray100)
                               : BorderSide.none,
                         ),
                         borderRadius: BorderRadius.only(
@@ -1195,7 +1194,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                                     children: [
                                       Text(
                                         _formatDateLabel(entry.date),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontFamily: 'Manrope',
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
@@ -1204,7 +1203,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                                       ),
                                       Text(
                                         _formatTimeLabel(entry.addedAt),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontFamily: 'Manrope',
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
@@ -1226,7 +1225,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                                 const SizedBox(width: 4),
                                 IconButton(
                                   onPressed: () => _requestDelete(entry),
-                                  icon: const Icon(
+                                  icon: Icon(
                                     LucideIcons.trash2,
                                     size: 16,
                                     color: AppTheme.gray300,
@@ -1242,7 +1241,7 @@ class _PlaytimeHistoryPageState extends State<_PlaytimeHistoryPage> {
                             ),
                           ),
                           if (!isLast)
-                            const Divider(
+                            Divider(
                               height: 1,
                               thickness: 1,
                               color: AppTheme.gray100,

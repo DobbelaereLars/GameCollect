@@ -58,10 +58,10 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft, color: AppTheme.black),
+          icon: Icon(LucideIcons.chevronLeft, color: AppTheme.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
+        title: Text(
           'Niet meetellen',
           style: TextStyle(
             fontFamily: 'Manrope',
@@ -78,9 +78,9 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(LucideIcons.eye, size: 48, color: AppTheme.gray300),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Text(
                       'Geen verborgen achievements.\nAchievements die je niet wil meetellen in je progressie vind je hier terug.',
                       textAlign: TextAlign.center,
@@ -100,7 +100,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               itemCount: _achievements.length,
               separatorBuilder: (_, _) =>
-                  const Divider(height: 1, color: AppTheme.gray100),
+                  Divider(height: 1, color: AppTheme.gray100),
               itemBuilder: (context, index) {
                 final achievement = _achievements[index];
                 return Padding(
@@ -127,7 +127,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                             });
                           },
                           activeColor: AppTheme.orange500,
-                          side: const BorderSide(color: AppTheme.gray300),
+                          side: BorderSide(color: AppTheme.gray300),
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
@@ -152,7 +152,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                           achievement.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Manrope',
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
