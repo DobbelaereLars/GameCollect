@@ -2395,8 +2395,15 @@ class _GameSettingsPage extends StatefulWidget {
 }
 
 class _GameSettingsPageState extends State<_GameSettingsPage> {
+  static const List<String> _formatOptions = [
+    'Fysiek',
+    'Digitaal',
+    'Fysiek & Digitaal',
+  ];
+
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
+  String _currentPlatformWithFormat = '';
   bool _hasMultiplePlatforms = false;
   List<String> _availablePlatforms = [];
   Set<String> _alreadyAddedPlatformNames = {};
@@ -2407,7 +2414,19 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     super.initState();
     _isManuallyCompleted = widget.item.isManuallyCompleted;
     _customCoverPath = widget.item.customCoverPath;
+    _currentPlatformWithFormat = widget.platformWithFormat;
     _loadPlatformCount();
+  }
+
+  String get _currentFormat {
+    final match = RegExp(
+      r'\(([^)]*)\)\s*$',
+    ).firstMatch(_currentPlatformWithFormat);
+    final raw = match?.group(1)?.trim();
+    if (raw == null || raw.isEmpty) return 'Fysiek & Digitaal';
+    // Normalize legacy value.
+    if (raw == 'Allebei') return 'Fysiek & Digitaal';
+    return raw;
   }
 
   Future<void> _loadPlatformCount() async {
@@ -2550,6 +2569,161 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     await _save();
   }
 
+  Future<void> _changeFormat(String newFormat) async {
+    if (newFormat == _currentFormat) return;
+    final newPlatformWithFormat = '${widget.platformName} ($newFormat)';
+    final updatedPlatforms = widget.item.selectedPlatforms.map((p) {
+      return p == _currentPlatformWithFormat ? newPlatformWithFormat : p;
+    }).toList();
+    final updated = widget.item.copyWith(
+      selectedPlatforms: updatedPlatforms,
+      format: newFormat,
+    );
+    await DatabaseHelper.instance.updateCollectionItem(updated);
+    if (!mounted) return;
+    setState(() {
+      _currentPlatformWithFormat = newPlatformWithFormat;
+    });
+    widget.onItemChanged?.call(updated);
+  }
+
+  Future<void> _showFormatSheet() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        final current = _currentFormat;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Formaat aanpassen',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Selecteer de vorm waarin je deze game bezit op '
+                '${widget.platformName}.',
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _formatOptions.map((format) {
+                  final isSelected = current == format;
+                  return ChoiceChip(
+                    showCheckmark: false,
+                    label: Text(format),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) {
+                        Navigator.of(sheetContext).pop(format);
+                      }
+                    },
+                    selectedColor: AppTheme.orange500,
+                    labelStyle: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? AppTheme.white : AppTheme.black,
+                    ),
+                    backgroundColor: AppTheme.white,
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: isSelected
+                            ? AppTheme.orange500
+                            : AppTheme.orange200,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await _changeFormat(selected);
+    }
+  }
+
+  Widget _buildFormatRow() {
+    return InkWell(
+      onTap: _showFormatSheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.disc3, size: 18, color: AppTheme.orange500),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Formaat',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            Text(
+              _currentFormat,
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.gray700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: AppTheme.gray500,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2581,6 +2755,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               const SizedBox(height: 24),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildCompletedRow(),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              _buildFormatRow(),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               if (_availablePlatforms
                   .where((p) => !_alreadyAddedPlatformNames.contains(p))
@@ -2819,7 +2995,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   if (widget.item.id != null) {
                     final updatedPlatforms = List<String>.from(
                       widget.item.selectedPlatforms,
-                    )..remove(widget.platformWithFormat);
+                    )..remove(_currentPlatformWithFormat);
                     if (updatedPlatforms.isEmpty) {
                       await DatabaseHelper.instance.deleteCollectionItem(
                         widget.item.id!,

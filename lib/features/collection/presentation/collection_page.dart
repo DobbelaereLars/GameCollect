@@ -9,6 +9,7 @@ import '../domain/collection_item.dart';
 import 'collection_item_detail_page.dart';
 import 'widgets/add_platform_sheet.dart';
 import '../../discover/presentation/widgets/discover_search_bar.dart';
+import '../../../core/preferences/view_preferences.dart';
 
 class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key});
@@ -31,7 +32,7 @@ class _CollectionPageState extends State<CollectionPage> {
   List<CollectionItem> _allItems = [];
   List<CollectionItem> _filteredItems = [];
   bool _isLoading = true;
-  bool _isGridView = false;
+  bool _isGridView = ViewPreferences.defaultCollectionIsGridView;
 
   // Filters
   Set<String> _selectedFormats = {};
@@ -55,6 +56,7 @@ class _CollectionPageState extends State<CollectionPage> {
   @override
   void initState() {
     super.initState();
+    _loadViewPreference();
     _loadCollection();
     _searchController.addListener(_applyFilters);
     DatabaseHelper.instance.addListener(_loadCollection);
@@ -119,6 +121,14 @@ class _CollectionPageState extends State<CollectionPage> {
         ),
       );
     });
+  }
+
+  Future<void> _loadViewPreference() async {
+    final value = await ViewPreferences.getCollectionIsGridView();
+    if (!mounted) return;
+    if (value != _isGridView) {
+      setState(() => _isGridView = value);
+    }
   }
 
   Future<void> _loadCollection() async {
@@ -430,8 +440,12 @@ class _CollectionPageState extends State<CollectionPage> {
                                     : LucideIcons.layoutGrid,
                                 color: AppTheme.orange500,
                               ),
-                              onPressed: () =>
-                                  setState(() => _isGridView = !_isGridView),
+                              onPressed: () {
+                                setState(() => _isGridView = !_isGridView);
+                                ViewPreferences.setCollectionIsGridView(
+                                  _isGridView,
+                                );
+                              },
                             ),
                             IconButton(
                               icon: Stack(
@@ -599,7 +613,7 @@ class _CollectionPageState extends State<CollectionPage> {
       }
       return GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           crossAxisSpacing: 8,

@@ -14,6 +14,7 @@ import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
 import 'game_detail_page.dart';
 import 'widgets/discover_search_bar.dart';
+import '../../../core/preferences/view_preferences.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
@@ -64,9 +65,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
   List<RawgGame> _games = const [];
   String? _nextPageUrl;
 
+  /// 1 = lijst (één rij per game), 2 = grid (2 kolommen), 3 = grid (3 kolommen).
+  int _gridColumns =
+      ViewPreferences.defaultDiscoverGridColumns; // 2 of 3 kolommen
+
   @override
   void initState() {
     super.initState();
+    _loadViewPreference();
     _scrollController.addListener(_onScroll);
     DiscoverPage.gameDetailRequest.addListener(_onGameDetailRequest);
     DiscoverPage.scrollToTopRequest.addListener(_onScrollToTop);
@@ -493,15 +499,42 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Column(
                   children: [
-                    DiscoverSearchBar(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      onSubmitted: _onSearchSubmitted,
-                      onClearPressed: _clearSearch,
-                      showCameraButton: _showCameraButton,
-                      onCameraPressed: _openCamera,
-                      isCameraBusy: false,
-                      isCameraDisabled: _isOpeningCamera || _isRecognizingCover,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DiscoverSearchBar(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            onSubmitted: _onSearchSubmitted,
+                            onClearPressed: _clearSearch,
+                            showCameraButton: false,
+                            onCameraPressed: _openCamera,
+                            isCameraBusy: false,
+                            isCameraDisabled:
+                                _isOpeningCamera || _isRecognizingCover,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: _layoutCycleTooltip,
+                          icon: Icon(
+                            _layoutCycleIcon,
+                            color: AppTheme.orange500,
+                          ),
+                          onPressed: _cycleLayout,
+                        ),
+                        if (_showCameraButton)
+                          IconButton(
+                            tooltip: 'Cover scannen',
+                            icon: const Icon(
+                              LucideIcons.camera,
+                              color: AppTheme.orange500,
+                            ),
+                            onPressed: (_isOpeningCamera || _isRecognizingCover)
+                                ? null
+                                : _openCamera,
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -519,6 +552,32 @@ class _DiscoverPageState extends State<DiscoverPage> {
         ],
       ),
     );
+  }
+
+  void _cycleLayout() {
+    setState(() {
+      _gridColumns = _gridColumns == 2 ? 3 : 2;
+    });
+    ViewPreferences.setDiscoverGridColumns(_gridColumns);
+  }
+
+  Future<void> _loadViewPreference() async {
+    final value = await ViewPreferences.getDiscoverGridColumns();
+    if (!mounted) return;
+    if (value != _gridColumns) {
+      setState(() => _gridColumns = value);
+    }
+  }
+
+  IconData get _layoutCycleIcon {
+    // Toon het icoon dat past bij de VOLGENDE stand.
+    return _gridColumns == 2 ? LucideIcons.grid3x3 : LucideIcons.layoutGrid;
+  }
+
+  String get _layoutCycleTooltip {
+    return _gridColumns == 2
+        ? 'Toon als 3-koloms raster'
+        : 'Toon als 2-koloms raster';
   }
 
   Widget _buildContent(TextTheme textTheme) {
@@ -584,16 +643,21 @@ class _DiscoverPageState extends State<DiscoverPage> {
       );
     }
 
+    return _buildGridView(textTheme, _gridColumns);
+  }
+
+  Widget _buildGridView(TextTheme textTheme, int columns) {
+    final extraLoadingTiles = _isLoadingMore ? columns : 0;
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.72,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 2 / 3,
       ),
-      itemCount: _games.length + (_isLoadingMore ? 2 : 0),
+      itemCount: _games.length + extraLoadingTiles,
       itemBuilder: (context, index) {
         if (index >= _games.length) {
           return const Center(child: CircularProgressIndicator());
@@ -640,7 +704,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(10, 28, 10, 8),
+                    padding: EdgeInsets.fromLTRB(
+                      columns == 3 ? 8 : 10,
+                      columns == 3 ? 20 : 28,
+                      columns == 3 ? 8 : 10,
+                      columns == 3 ? 6 : 8,
+                    ),
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -656,10 +725,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       game.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style:
+                          (columns == 3
+                                  ? textTheme.bodySmall
+                                  : textTheme.bodyMedium)
+                              ?.copyWith(
+                                color: AppTheme.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                     ),
                   ),
                 ),
