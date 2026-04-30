@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -29,6 +30,7 @@ class _CollectionPageState extends State<CollectionPage> {
   List<CollectionItem> _allItems = [];
   List<CollectionItem> _filteredItems = [];
   bool _isLoading = true;
+  bool _isGridView = false;
 
   // Filters
   Set<String> _selectedFormats = {};
@@ -406,7 +408,17 @@ class _CollectionPageState extends State<CollectionPage> {
                                 isCameraDisabled: false,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(
+                                _isGridView
+                                    ? LucideIcons.layoutList
+                                    : LucideIcons.layoutGrid,
+                                color: AppTheme.orange500,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _isGridView = !_isGridView),
+                            ),
                             IconButton(
                               icon: Stack(
                                 children: [
@@ -552,6 +564,51 @@ class _CollectionPageState extends State<CollectionPage> {
     }
 
     final sortedPlatforms = groupedItems.keys.toList()..sort();
+
+    if (_isGridView) {
+      // Group filtered items by apiId so games with multiple platforms
+      // become ONE card that cycles through its platforms (same as overview).
+      final passingItems = <CollectionItem>{};
+      for (final platform in sortedPlatforms) {
+        passingItems.addAll(groupedItems[platform]!);
+      }
+      final seenApiIds = <int>{};
+      final groups = <List<CollectionItem>>[];
+      for (final item in _filteredItems) {
+        if (!passingItems.contains(item)) continue;
+        if (seenApiIds.add(item.apiId)) {
+          final allForGame = _filteredItems
+              .where((e) => e.apiId == item.apiId && passingItems.contains(e))
+              .toList(growable: false);
+          groups.add(allForGame);
+        }
+      }
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 2 / 3,
+        ),
+        itemCount: groups.length,
+        itemBuilder: (context, index) {
+          final group = groups[index];
+          return _GridCoverCard(
+            group: group,
+            onTap: (item) {
+              if (item.id != null) {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+                  ),
+                );
+              }
+            },
+          );
+        },
+      );
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 90),
@@ -1136,6 +1193,261 @@ class _CollectionPageState extends State<CollectionPage> {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Grid cover card with platform cycling ─────────────────────────────────────
+
+class _GridCoverCard extends StatefulWidget {
+  const _GridCoverCard({required this.group, required this.onTap});
+
+  final List<CollectionItem> group;
+  final void Function(CollectionItem item) onTap;
+
+  @override
+  State<_GridCoverCard> createState() => _GridCoverCardState();
+}
+
+class _GridCoverCardState extends State<_GridCoverCard> {
+  int _selectedIndex = 0;
+  bool _forward = true;
+  Timer? _cycleTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCycleIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(_GridCoverCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.group.length != widget.group.length) {
+      _selectedIndex = _selectedIndex.clamp(0, widget.group.length - 1);
+      _startCycleIfNeeded();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cycleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startCycleIfNeeded() {
+    _cycleTimer?.cancel();
+    if (widget.group.length <= 1) return;
+    _cycleTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      setState(() {
+        _forward = true;
+        _selectedIndex = (_selectedIndex + 1) % widget.group.length;
+      });
+    });
+  }
+
+  CollectionItem get _current {
+    final idx = _selectedIndex.clamp(0, widget.group.length - 1);
+    return widget.group[idx];
+  }
+
+  String _cleanPlatformName(String raw) {
+    return raw.replaceAll(RegExp(r'\s*\([^)]*\)$'), '').trim();
+  }
+
+  Widget _coverWidget(CollectionItem item) {
+    if (item.customCoverPath != null) {
+      return SizedBox.expand(
+        child: Image.file(
+          File(item.customCoverPath!),
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _placeholder(),
+        ),
+      );
+    }
+    if (item.coverUrl != null) {
+      return SizedBox.expand(
+        child: Image.network(
+          item.coverUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _placeholder(),
+        ),
+      );
+    }
+    return _placeholder();
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: AppTheme.orange50,
+      child: const Center(
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 28),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final hasMultiple = widget.group.length > 1;
+    final current = _current;
+    final platformName = current.selectedPlatforms.isNotEmpty
+        ? _cleanPlatformName(current.selectedPlatforms.first)
+        : null;
+
+    return GestureDetector(
+      onTap: () => widget.onTap(current),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Cover image with swipe animation on platform switch
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 320),
+                transitionBuilder: (child, animation) {
+                  final dir = _forward ? 1.0 : -1.0;
+                  final isIncoming = child.key == ValueKey(_selectedIndex);
+                  final curved = CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeInOut,
+                  );
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: isIncoming ? Offset(dir, 0.0) : Offset(-dir, 0.0),
+                      end: Offset.zero,
+                    ).animate(curved),
+                    child: child,
+                  );
+                },
+                child: Container(
+                  key: ValueKey(_selectedIndex),
+                  color: AppTheme.orange50,
+                  child: _coverWidget(current),
+                ),
+              ),
+            ),
+
+            // Top-left platform badge (same style as overview _CoverBadge)
+            if (platformName != null)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.orange50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.gamepad2,
+                        size: 11,
+                        color: AppTheme.orange500,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        platformName.isNotEmpty ? platformName : '?',
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.orange700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Bottom gradient + game title + dot indicators
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(8, 28, 8, 8),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppTheme.blackTransparent0,
+                      AppTheme.blackTransparent80,
+                    ],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      current.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: AppTheme.white,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                    if (hasMultiple) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(widget.group.length, (i) {
+                            final isActive = i == _selectedIndex;
+                            return GestureDetector(
+                              onTap: () {
+                                _cycleTimer?.cancel();
+                                setState(() {
+                                  _forward = i > _selectedIndex;
+                                  _selectedIndex = i;
+                                });
+                                Future.delayed(const Duration(seconds: 4), () {
+                                  if (mounted) _startCycleIfNeeded();
+                                });
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: isActive ? 16 : 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                        ? AppTheme.orange500
+                                        : AppTheme.orange200,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
