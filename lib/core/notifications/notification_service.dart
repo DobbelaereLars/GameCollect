@@ -20,8 +20,9 @@ class NotificationService {
   Future<void> initialize() async {
     tz.initializeTimeZones();
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -40,15 +41,19 @@ class NotificationService {
 
   /// Returns whether the user has granted notification permission at system level.
   Future<bool> arePermissionsGranted() async {
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
     if (ios != null) {
       final perms = await ios.checkPermissions();
       return perms?.isEnabled ?? false;
     }
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       return await android.areNotificationsEnabled() ?? false;
     }
@@ -57,8 +62,10 @@ class NotificationService {
   }
 
   Future<bool> requestPermissions() async {
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
     if (ios != null) {
       final granted = await ios.requestPermissions(
         alert: true,
@@ -68,8 +75,10 @@ class NotificationService {
       return granted ?? false;
     }
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       final granted = await android.requestNotificationsPermission();
       return granted ?? false;
@@ -83,8 +92,7 @@ class NotificationService {
   /// Schedules a daily notification at 19:00 with a random game from the
   /// provided list. Replaces any existing daily reminder.
   Future<void> scheduleDailyReminder(List<CollectionItem> items) async {
-    final enabled =
-        await DatabaseHelper.instance.getNotificationsEnabled();
+    final enabled = await DatabaseHelper.instance.getNotificationsEnabled();
     if (!enabled) return;
 
     // Pick a game that is in progress, not completed, and played in the last 5 days.
@@ -152,7 +160,8 @@ class NotificationService {
 
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
-    if (kDebugMode) debugPrint('[NotificationService] All notifications cancelled.');
+    if (kDebugMode)
+      debugPrint('[NotificationService] All notifications cancelled.');
   }
 
   // ── Schedule all (re-enable) ─────────────────────────────────────────────────

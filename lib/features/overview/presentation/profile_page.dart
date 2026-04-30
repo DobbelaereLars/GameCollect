@@ -6,7 +6,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/notifications/notification_service.dart';
+import '../../../core/sync/auth_service.dart';
+import '../../../core/sync/connectivity_service.dart';
+import '../../../core/sync/sync_service.dart';
 import '../../../core/theme/app_theme.dart';
+import 'auth_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -26,13 +30,30 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) setState(() => _version = info.version);
     });
     _syncNotificationState();
+    AuthService.instance.addListener(_onSyncOrAuthChange);
+    SyncService.instance.addListener(_onSyncOrAuthChange);
+    ConnectivityService.instance.addListener(_onSyncOrAuthChange);
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.removeListener(_onSyncOrAuthChange);
+    SyncService.instance.removeListener(_onSyncOrAuthChange);
+    ConnectivityService.instance.removeListener(_onSyncOrAuthChange);
+    super.dispose();
+  }
+
+  void _onSyncOrAuthChange() {
+    if (!mounted) return;
+    // The notifications preference may have just been changed by sync.
+    _syncNotificationState();
+    setState(() {});
   }
 
   Future<void> _syncNotificationState() async {
-    final systemGranted =
-        await NotificationService.instance.arePermissionsGranted();
-    final dbEnabled =
-        await DatabaseHelper.instance.getNotificationsEnabled();
+    final systemGranted = await NotificationService.instance
+        .arePermissionsGranted();
+    final dbEnabled = await DatabaseHelper.instance.getNotificationsEnabled();
 
     // If system permission is revoked, correct the DB so it stays in sync.
     if (!systemGranted && dbEnabled) {
@@ -47,6 +68,16 @@ class _ProfilePageState extends State<ProfilePage> {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   Future<void> _resetApp(BuildContext context) async {
+    // Sign out first so the device no longer has a session token. Cloud data
+    // remains untouched — the user can sign back in later to restore it.
+    if (AuthService.instance.isSignedIn) {
+      try {
+        await AuthService.instance.signOut();
+      } catch (_) {
+        // Best-effort; ignore errors so reset always completes.
+      }
+    }
+
     // Close and delete the database file
     final db = await DatabaseHelper.instance.database;
     final dbPath = db.path;
@@ -174,6 +205,10 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ── Account ──────────────────────────────────────────────────
+              _buildSectionLabel('Account'),
+              ..._buildAccountSection(context),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               // ── Notifications ──────────────────────────────────────────────
               _buildSectionLabel('Meldingen'),
               _buildToggleRow(
@@ -190,12 +225,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         ScaffoldMessenger.of(context)
                           ..clearSnackBars()
                           ..showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Sta meldingen toe in Instellingen van je apparaat.',
+                            const SnackBar(
+                              content: Text(
+                                'Sta meldingen toe in Instellingen van je apparaat.',
+                              ),
                             ),
-                          ),
-                        );
+                          );
                       }
                       return;
                     }
@@ -204,8 +239,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     await NotificationService.instance.scheduleAll();
                   } else {
                     setState(() => _notificationsEnabled = false);
-                    await DatabaseHelper.instance
-                        .setNotificationsEnabled(false);
+                    await DatabaseHelper.instance.setNotificationsEnabled(
+                      false,
+                    );
                     await NotificationService.instance.cancelAll();
                   }
                 },
@@ -251,6 +287,263 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
+  }
+
+  // ── Account section ───────────────────────────────────────────────────────
+
+  List<Widget> _buildAccountSection(BuildContext context) {
+    final auth = AuthService.instance;
+    if (!auth.isAvailable) {
+      return [
+        _buildInfoRow(
+          icon: LucideIcons.cloudOff,
+          label: 'Cloud-sync',
+          value: 'Niet ingesteld',
+        ),
+      ];
+    }
+
+    if (!auth.isSignedIn) {
+      return [
+        _buildActionRow(
+          context: context,
+          icon: LucideIcons.cloudOff,
+          label: 'Cloud-sync',
+          subtitle: 'Tik om aan te melden of een account aan te maken',
+          onTap: () => _openAuthPage(context, AuthMode.signIn),
+        ),
+      ];
+    }
+
+    final sync = SyncService.instance;
+    final connectivity = ConnectivityService.instance;
+    return [
+      _buildInfoRow(
+        icon: LucideIcons.userCheck,
+        label: 'Aangemeld als',
+        value: auth.email ?? '—',
+      ),
+      _buildSyncStatusRow(sync: sync, online: connectivity.isOnline),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: (sync.isSyncing || !connectivity.isOnline)
+                ? null
+                : () async {
+                    final ok = await sync.syncNow();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                      ..clearSnackBars()
+                      ..showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            ok
+                                ? 'Synchronisatie voltooid.'
+                                : (sync.lastError ?? 'Synchronisatie mislukt.'),
+                          ),
+                        ),
+                      );
+                  },
+            icon: sync.isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.white,
+                    ),
+                  )
+                : const Icon(LucideIcons.refreshCw, size: 20),
+            label: Text(
+              sync.isSyncing
+                  ? 'Bezig met synchroniseren…'
+                  : 'Nu synchroniseren',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            style:
+                OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.orange500,
+                  side: const BorderSide(color: AppTheme.orange500, width: 2),
+                  disabledForegroundColor: AppTheme.white,
+                  disabledBackgroundColor: AppTheme.orange100,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ).copyWith(
+                  // Hide the border when the button is disabled so it matches the
+                  // app-wide "disabled = solid orange100 with white text" pattern.
+                  side: WidgetStateProperty.resolveWith<BorderSide?>((states) {
+                    if (states.contains(WidgetState.disabled)) {
+                      return BorderSide.none;
+                    }
+                    return const BorderSide(
+                      color: AppTheme.orange500,
+                      width: 2,
+                    );
+                  }),
+                ),
+          ),
+        ),
+      ),
+      _buildActionRow(
+        context: context,
+        icon: LucideIcons.logOut,
+        label: 'Account loskoppelen',
+        subtitle:
+            'Cloud-sync stopt. Lokale data blijft staan; meld opnieuw aan om verder te synchroniseren.',
+        onTap: () => _confirmSignOut(context),
+      ),
+    ];
+  }
+
+  Widget _buildSyncStatusRow({
+    required SyncService sync,
+    required bool online,
+  }) {
+    final IconData icon;
+    final String label;
+    final String subtitle;
+    final Color iconColor;
+
+    if (!online) {
+      icon = LucideIcons.cloudOff;
+      iconColor = AppTheme.orange700;
+      label = 'Geen verbinding';
+      final pending = sync.pendingChanges;
+      subtitle = pending == 0
+          ? 'Synchronisatie hervat zodra je weer online bent.'
+          : '$pending wijziging${pending == 1 ? '' : 'en'} wachten op verbinding.';
+    } else if (sync.isSyncing) {
+      icon = LucideIcons.refreshCw;
+      iconColor = AppTheme.orange500;
+      label = 'Bezig met synchroniseren';
+      subtitle = 'Even geduld…';
+    } else if (sync.pendingChanges > 0) {
+      icon = LucideIcons.cloudUpload;
+      iconColor = AppTheme.orange500;
+      final p = sync.pendingChanges;
+      label = '$p wijziging${p == 1 ? '' : 'en'} wachten';
+      subtitle = 'Tik op "Nu synchroniseren" om te uploaden.';
+    } else {
+      icon = LucideIcons.cloudCheck;
+      iconColor = AppTheme.orange500;
+      label = 'Up-to-date';
+      final last = sync.lastSyncAt;
+      subtitle = last == null
+          ? 'Nog niet gesynchroniseerd.'
+          : 'Laatst gesynchroniseerd ${_formatRelative(last)}.';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: iconColor),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.black,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: AppTheme.gray500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatRelative(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inSeconds < 60) return 'zojuist';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min geleden';
+    if (diff.inHours < 24) return '${diff.inHours} u geleden';
+    if (diff.inDays < 7) return '${diff.inDays} d geleden';
+    return '${time.day}/${time.month}/${time.year}';
+  }
+
+  Future<void> _openAuthPage(BuildContext context, AuthMode mode) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => AuthPage(initialMode: mode)),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Account loskoppelen?',
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.black,
+            ),
+          ),
+          content: const Text(
+            'Cloud-sync stopt. Nieuwe wijzigingen worden niet meer naar de cloud gestuurd. '
+            'Je lokale gegevens blijven op dit toestel staan en je gegevens in de cloud blijven bewaard. '
+            'Je kunt later opnieuw aanmelden om verder te synchroniseren.',
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+              color: AppTheme.gray700,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.gray700),
+              child: const Text('Annuleren'),
+            ),
+            OutlinedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.orange500,
+                side: const BorderSide(color: AppTheme.orange500),
+              ),
+              child: const Text(
+                'Loskoppelen',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await AuthService.instance.signOut();
+    }
   }
 
   Widget _buildInfoRow({
@@ -345,10 +638,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            child: Switch(
-              value: value,
-              onChanged: onChanged,
-            ),
+            child: Switch(value: value, onChanged: onChanged),
           ),
         ],
       ),

@@ -1,9 +1,24 @@
+import 'dart:math';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../features/collection/domain/collection_item.dart';
 import '../../features/discover/domain/rawg_game.dart';
 
 import "package:flutter/foundation.dart";
+
+/// Generates a v4-style UUID using a CSPRNG. No external dependency required.
+String generateSyncId() {
+  final r = Random.secure();
+  final bytes = List<int>.generate(16, (_) => r.nextInt(256));
+  // RFC 4122 variant + version 4 bits.
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+  final h = bytes.map(hex).join();
+  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-'
+      '${h.substring(16, 20)}-${h.substring(20)}';
+}
 
 class DatabaseHelper extends ChangeNotifier {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -29,7 +44,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -58,7 +73,10 @@ CREATE TABLE collection (
   addedAt TEXT NOT NULL,
   isManuallyCompleted INTEGER NOT NULL DEFAULT 0,
   startedPlayingAt TEXT,
-  availablePlatforms TEXT NOT NULL DEFAULT '[]'
+  availablePlatforms TEXT NOT NULL DEFAULT '[]',
+  syncId TEXT NOT NULL UNIQUE,
+  updatedAt INTEGER NOT NULL DEFAULT 0,
+  deletedAt INTEGER
 )
 ''');
     await db.execute('''
@@ -77,13 +95,16 @@ CREATE TABLE game_achievements (
 CREATE TABLE app_achievements (
   id TEXT PRIMARY KEY,
   unlockedAt TEXT,
-  seenAt TEXT
+  seenAt TEXT,
+  updatedAt INTEGER NOT NULL DEFAULT 0,
+  deletedAt INTEGER
 )
 ''');
     await db.execute('''
 CREATE TABLE event_counters (
   key TEXT PRIMARY KEY,
-  value INTEGER NOT NULL DEFAULT 0
+  value INTEGER NOT NULL DEFAULT 0,
+  updatedAt INTEGER NOT NULL DEFAULT 0
 )
 ''');
     await db.execute('''
@@ -192,12 +213,49 @@ CREATE TABLE IF NOT EXISTS settings (
 )
 ''');
     }
+    if (oldVersion < 11) {
+      // Add sync columns to syncable tables and backfill values.
+      await db.execute('ALTER TABLE collection ADD COLUMN syncId TEXT');
+      await db.execute(
+        'ALTER TABLE collection ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute('ALTER TABLE collection ADD COLUMN deletedAt INTEGER');
+      await db.execute(
+        'ALTER TABLE app_achievements ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE app_achievements ADD COLUMN deletedAt INTEGER',
+      );
+      await db.execute(
+        'ALTER TABLE event_counters ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0',
+      );
+      // Backfill syncId per row + initial updatedAt = now.
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final rows = await db.query('collection', columns: ['id']);
+      for (final row in rows) {
+        await db.update(
+          'collection',
+          {'syncId': generateSyncId(), 'updatedAt': now},
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+      await db.execute('UPDATE app_achievements SET updatedAt = ?', [now]);
+      await db.execute('UPDATE event_counters SET updatedAt = ?', [now]);
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_syncId ON collection(syncId)',
+      );
+    }
   }
 
   Future<int> insertCollectionItem(CollectionItem item) async {
     final db = await instance.database;
 
-    final id = await db.insert("collection", item.toMap());
+    final map = item.toMap();
+    map['syncId'] = generateSyncId();
+    map['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    map['deletedAt'] = null;
+    final id = await db.insert("collection", map);
     notifyListeners();
     return id;
   }
@@ -205,9 +263,14 @@ CREATE TABLE IF NOT EXISTS settings (
   Future<int> updateCollectionItem(CollectionItem item) async {
     final db = await instance.database;
 
+    final map = item.toMap();
+    // Preserve existing syncId; bump updatedAt; ensure deletedAt is cleared.
+    map.remove('syncId');
+    map['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    map['deletedAt'] = null;
     final result = await db.update(
       "collection",
-      item.toMap(),
+      map,
       where: "id = ?",
       whereArgs: [item.id],
     );
@@ -217,7 +280,11 @@ CREATE TABLE IF NOT EXISTS settings (
 
   Future<List<CollectionItem>> getCollectionItems() async {
     final db = await instance.database;
-    final result = await db.query('collection', orderBy: 'addedAt DESC');
+    final result = await db.query(
+      'collection',
+      where: 'deletedAt IS NULL',
+      orderBy: 'addedAt DESC',
+    );
     return result.map((json) => CollectionItem.fromMap(json)).toList();
   }
 
@@ -225,7 +292,7 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
     final result = await db.query(
       'collection',
-      where: 'id = ?',
+      where: 'id = ? AND deletedAt IS NULL',
       whereArgs: [id],
       limit: 1,
     );
@@ -237,7 +304,6 @@ CREATE TABLE IF NOT EXISTS settings (
 
   Future<void> deleteCollectionItem(int id) async {
     final db = await instance.database;
-    // Look up the apiId before deleting so we can clean up achievements if needed.
     final rows = await db.query(
       'collection',
       columns: ['apiId'],
@@ -245,11 +311,18 @@ CREATE TABLE IF NOT EXISTS settings (
       whereArgs: [id],
       limit: 1,
     );
-    await db.delete('collection', where: 'id = ?', whereArgs: [id]);
+    // Soft delete: set deletedAt + bump updatedAt so the change is pushed.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'collection',
+      {'deletedAt': now, 'updatedAt': now},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (rows.isNotEmpty) {
       final apiId = rows.first['apiId'] as int;
       final remaining = await db.rawQuery(
-        'SELECT COUNT(*) AS total FROM collection WHERE apiId = ?',
+        'SELECT COUNT(*) AS total FROM collection WHERE apiId = ? AND deletedAt IS NULL',
         [apiId],
       );
       final count = remaining.first['total'] as int? ?? 0;
@@ -266,7 +339,13 @@ CREATE TABLE IF NOT EXISTS settings (
 
   Future<void> deleteCollectionItemsByApiId(int apiId) async {
     final db = await instance.database;
-    await db.delete('collection', where: 'apiId = ?', whereArgs: [apiId]);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'collection',
+      {'deletedAt': now, 'updatedAt': now},
+      where: 'apiId = ? AND deletedAt IS NULL',
+      whereArgs: [apiId],
+    );
     await db.delete(
       'game_achievements',
       where: 'apiId = ?',
@@ -279,7 +358,7 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
     final result = await db.query(
       'collection',
-      where: 'apiId = ?',
+      where: 'apiId = ? AND deletedAt IS NULL',
       whereArgs: [apiId],
     );
     return result.map((json) => CollectionItem.fromMap(json)).toList();
@@ -288,7 +367,7 @@ CREATE TABLE IF NOT EXISTS settings (
   Future<int> countCollectionItemsByApiId(int apiId) async {
     final db = await instance.database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) AS total FROM collection WHERE apiId = ?',
+      'SELECT COUNT(*) AS total FROM collection WHERE apiId = ? AND deletedAt IS NULL',
       [apiId],
     );
     final total = result.first['total'] as int?;
@@ -299,7 +378,7 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
     final result = await db.query(
       'collection',
-      where: 'apiId = ?',
+      where: 'apiId = ? AND deletedAt IS NULL',
       whereArgs: [apiId],
       limit: 1,
     );
@@ -421,11 +500,15 @@ CREATE TABLE IF NOT EXISTS settings (
   /// Marks an app-level achievement as unlocked (no-op if already unlocked).
   Future<void> unlockAppAchievement(String id) async {
     final db = await instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.insert('app_achievements', {
       'id': id,
       'unlockedAt': DateTime.now().toIso8601String(),
       'seenAt': null,
+      'updatedAt': now,
+      'deletedAt': null,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    notifyListeners();
   }
 
   /// Marks a previously unlocked achievement as "seen" by the user.
@@ -433,7 +516,10 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
     await db.update(
       'app_achievements',
-      {'seenAt': DateTime.now().toIso8601String()},
+      {
+        'seenAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
       where: 'id = ? AND seenAt IS NULL',
       whereArgs: [id],
     );
@@ -455,10 +541,11 @@ CREATE TABLE IF NOT EXISTS settings (
   /// Increments an event counter by 1, inserting with value 1 if not present.
   Future<void> incrementEventCounter(String key) async {
     final db = await instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.execute(
-      'INSERT INTO event_counters (key, value) VALUES (?, 1) '
-      'ON CONFLICT(key) DO UPDATE SET value = value + 1',
-      [key],
+      'INSERT INTO event_counters (key, value, updatedAt) VALUES (?, 1, ?) '
+      'ON CONFLICT(key) DO UPDATE SET value = value + 1, updatedAt = excluded.updatedAt',
+      [key, now],
     );
     notifyListeners();
   }
@@ -494,5 +581,219 @@ CREATE TABLE IF NOT EXISTS settings (
 
   Future<void> setNotificationsEnabled(bool enabled) async {
     await setSetting('notificationsEnabled', enabled ? '1' : '0');
+    await setSetting(
+      'notificationsEnabledUpdatedAt',
+      DateTime.now().millisecondsSinceEpoch.toString(),
+    );
+    notifyListeners();
+  }
+
+  /// When the notifications preference was last changed locally
+  /// (epoch ms). 0 if never explicitly set.
+  Future<int> getNotificationsUpdatedAt() async {
+    final raw = await getSetting('notificationsEnabledUpdatedAt');
+    return int.tryParse(raw ?? '') ?? 0;
+  }
+
+  /// Apply a notifications preference coming from sync. The caller is
+  /// responsible for re-scheduling/cancelling notifications.
+  Future<void> applyRemoteNotificationsPreference({
+    required bool enabled,
+    required int updatedAt,
+  }) async {
+    await setSetting('notificationsEnabled', enabled ? '1' : '0');
+    await setSetting('notificationsEnabledUpdatedAt', updatedAt.toString());
+    notifyListeners();
+  }
+
+  // ── Sync Helpers ──────────────────────────────────────────────────────────
+  // These are used by SyncService. They expose raw rows including sync
+  // metadata (syncId, updatedAt, deletedAt) so that bidirectional sync with
+  // Firestore can be implemented without leaking Firestore concerns into the
+  // model layer.
+
+  /// All collection rows updated strictly after [sinceMs] (epoch milliseconds),
+  /// including soft-deleted tombstones. Each map contains all DB columns.
+  Future<List<Map<String, dynamic>>> getCollectionRowsChangedSince(
+    int sinceMs,
+  ) async {
+    final db = await instance.database;
+    return db.query(
+      'collection',
+      where: 'updatedAt > ?',
+      whereArgs: [sinceMs],
+      orderBy: 'updatedAt ASC',
+    );
+  }
+
+  Future<int> countLocalChangesSince(int sinceMs) async {
+    final db = await instance.database;
+    final cRows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM collection WHERE updatedAt > ?',
+      [sinceMs],
+    );
+    final aRows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM app_achievements WHERE updatedAt > ?',
+      [sinceMs],
+    );
+    final eRows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM event_counters WHERE updatedAt > ?',
+      [sinceMs],
+    );
+    int read(List<Map<String, Object?>> rows) => (rows.first['c'] as int?) ?? 0;
+    return read(cRows) + read(aRows) + read(eRows);
+  }
+
+  Future<List<Map<String, dynamic>>> getAppAchievementRowsChangedSince(
+    int sinceMs,
+  ) async {
+    final db = await instance.database;
+    return db.query(
+      'app_achievements',
+      where: 'updatedAt > ?',
+      whereArgs: [sinceMs],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getEventCounterRowsChangedSince(
+    int sinceMs,
+  ) async {
+    final db = await instance.database;
+    return db.query(
+      'event_counters',
+      where: 'updatedAt > ?',
+      whereArgs: [sinceMs],
+    );
+  }
+
+  /// Upsert a collection row coming from the cloud, keyed by [syncId].
+  /// Skips the write if the local row has a strictly newer [updatedAt].
+  /// Honors tombstones (deletedAt != null).
+  Future<void> applyRemoteCollectionRow(Map<String, dynamic> row) async {
+    final syncId = row['syncId'] as String?;
+    if (syncId == null) return;
+    final db = await instance.database;
+    final existing = await db.query(
+      'collection',
+      where: 'syncId = ?',
+      whereArgs: [syncId],
+      limit: 1,
+    );
+    final remoteUpdated = (row['updatedAt'] as num?)?.toInt() ?? 0;
+    if (existing.isNotEmpty) {
+      final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
+      if (localUpdated >= remoteUpdated) return;
+      final patch = Map<String, dynamic>.from(row)..remove('id');
+      await db.update(
+        'collection',
+        patch,
+        where: 'syncId = ?',
+        whereArgs: [syncId],
+      );
+    } else {
+      final insert = Map<String, dynamic>.from(row)..remove('id');
+      await db.insert(
+        'collection',
+        insert,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> applyRemoteAppAchievementRow(Map<String, dynamic> row) async {
+    final id = row['id'] as String?;
+    if (id == null) return;
+    final db = await instance.database;
+    final existing = await db.query(
+      'app_achievements',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    final remoteUpdated = (row['updatedAt'] as num?)?.toInt() ?? 0;
+    if (existing.isNotEmpty) {
+      final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
+      if (localUpdated >= remoteUpdated) return;
+      await db.update(
+        'app_achievements',
+        row,
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } else {
+      await db.insert(
+        'app_achievements',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> applyRemoteEventCounterRow(Map<String, dynamic> row) async {
+    final key = row['key'] as String?;
+    if (key == null) return;
+    final db = await instance.database;
+    final existing = await db.query(
+      'event_counters',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    final remoteUpdated = (row['updatedAt'] as num?)?.toInt() ?? 0;
+    if (existing.isNotEmpty) {
+      final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
+      if (localUpdated >= remoteUpdated) return;
+      // Counters: take the larger value to be safe across devices.
+      final remoteVal = (row['value'] as num?)?.toInt() ?? 0;
+      final localVal = (existing.first['value'] as num?)?.toInt() ?? 0;
+      await db.update(
+        'event_counters',
+        {
+          'value': remoteVal > localVal ? remoteVal : localVal,
+          'updatedAt': remoteUpdated,
+        },
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+    } else {
+      await db.insert(
+        'event_counters',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Wipes all syncable user data locally. Used when the user chooses
+  /// "overwrite local with cloud" at first login.
+  Future<void> clearAllSyncableLocalData() async {
+    final db = await instance.database;
+    await db.delete('collection');
+    await db.delete('app_achievements');
+    await db.delete('event_counters');
+    await db.delete('game_achievements');
+    // Clear synced preferences so the cloud values become the source of truth.
+    await db.delete(
+      'settings',
+      where: 'key IN (?, ?)',
+      whereArgs: ['notificationsEnabled', 'notificationsEnabledUpdatedAt'],
+    );
+    notifyListeners();
+  }
+
+  /// Forces every syncable row to be considered changed (updatedAt = now)
+  /// and clears local sync watermark. Used when the user chooses
+  /// "overwrite cloud with local" at first login.
+  Future<void> markAllSyncableRowsDirty() async {
+    final db = await instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.execute('UPDATE collection SET updatedAt = ?', [now]);
+    await db.execute('UPDATE app_achievements SET updatedAt = ?', [now]);
+    await db.execute('UPDATE event_counters SET updatedAt = ?', [now]);
+    // Bump the notifications preference timestamp so it gets pushed too.
+    await setSetting('notificationsEnabledUpdatedAt', now.toString());
   }
 }

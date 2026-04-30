@@ -51,3 +51,9 @@ app.*.map.json
 .env
 .env.*
 !.env.example
+
+# Firebase configuration (contain API keys — never commit)
+google-services.json
+GoogleService-Info.plist
+lib/firebase_options.dart
+firebase.json
