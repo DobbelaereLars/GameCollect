@@ -323,20 +323,10 @@ class SyncService extends ChangeNotifier {
     Map<String, dynamic>? newRemotePayload;
     int newUpdatedAt = DateTime.now().millisecondsSinceEpoch;
 
-    if (strategy == InitialSyncStrategy.overwriteCloud) {
-      newRemotePayload = {
-        'notificationsEnabled': localEnabled,
-        'notificationsEnabledUpdatedAt': localUpdatedAt == 0
-            ? newUpdatedAt
-            : localUpdatedAt,
-      };
-    } else if (strategy == InitialSyncStrategy.overwriteLocal) {
-      if (hasRemote) {
-        newLocalValue = remoteEnabled;
-        newUpdatedAt = remoteUpdatedAt;
-      }
-    } else if (strategy == InitialSyncStrategy.merge) {
-      // OR-merge: any "AAN" wins.
+    if (strategy != null) {
+      // Account koppelen (registreren of inloggen): altijd OR-merge.
+      // Notificatie-instelling is AAN zodra één kant AAN is.
+      // Dit geldt ongeacht de gekozen datastrategie (merge/overwrite).
       final merged = localEnabled || (hasRemote && remoteEnabled);
       if (merged != localEnabled) newLocalValue = merged;
       newRemotePayload = {
@@ -344,21 +334,28 @@ class SyncService extends ChangeNotifier {
         'notificationsEnabledUpdatedAt': newUpdatedAt,
       };
     } else {
-      // Normal sync: OR-merge — any "AAN" wins; alleen "uit+uit" = "uit".
-      // Rationale: een expliciete "aan" op om het even welk apparaat moet
-      // gerespecteerd worden, ook als het lokale apparaat toevallig "uit"
-      // heeft (bv. net aangemeld terwijl meldingen lokaal tijdelijk uitstonden).
-      final merged = localEnabled || (hasRemote && remoteEnabled);
-      if (merged != localEnabled) newLocalValue = merged;
-      // Schrijf altijd naar de cloud zodat het document altijd bestaat en de
-      // waarde up-to-date blijft.
-      final mergedUpdatedAt = localUpdatedAt == 0
-          ? newUpdatedAt
-          : localUpdatedAt;
-      newRemotePayload = {
-        'notificationsEnabled': merged,
-        'notificationsEnabledUpdatedAt': mergedUpdatedAt,
-      };
+      // Normale sync: last-write-wins op `updatedAt`.
+      // OR-merge gebeurt uitsluitend bij account koppelen (strategy != null).
+      if (!hasRemote) {
+        // Niets in de cloud → push lokale waarde.
+        newRemotePayload = {
+          'notificationsEnabled': localEnabled,
+          'notificationsEnabledUpdatedAt': localUpdatedAt == 0
+              ? newUpdatedAt
+              : localUpdatedAt,
+        };
+      } else if (localUpdatedAt > remoteUpdatedAt) {
+        // Lokaal is recenter → push naar cloud.
+        newRemotePayload = {
+          'notificationsEnabled': localEnabled,
+          'notificationsEnabledUpdatedAt': localUpdatedAt,
+        };
+      } else if (remoteUpdatedAt > localUpdatedAt) {
+        // Cloud is recenter → neem remote over.
+        if (remoteEnabled != localEnabled) newLocalValue = remoteEnabled;
+        newUpdatedAt = remoteUpdatedAt;
+      }
+      // Gelijk: niets te doen.
     }
 
     if (newRemotePayload != null) {

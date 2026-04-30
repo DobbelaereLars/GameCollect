@@ -247,10 +247,7 @@ class _CollectionPageState extends State<CollectionPage> {
                                 child: const Text('Filters wissen'),
                               ),
                             IconButton(
-                              icon: const Icon(
-                                LucideIcons.x,
-                                color: AppTheme.black,
-                              ),
+                              icon: Icon(LucideIcons.x, color: AppTheme.black),
                               onPressed: () => Navigator.of(context).pop(),
                             ),
                           ],
@@ -287,7 +284,7 @@ class _CollectionPageState extends State<CollectionPage> {
                               });
                             },
                             selectedColor: AppTheme.orange500,
-                            checkmarkColor: AppTheme.white,
+                            checkmarkColor: AppTheme.trueWhite,
                             labelStyle: textTheme.bodySmall?.copyWith(
                               color: isSelected
                                   ? AppTheme.white
@@ -341,7 +338,7 @@ class _CollectionPageState extends State<CollectionPage> {
                               });
                             },
                             selectedColor: AppTheme.orange500,
-                            checkmarkColor: AppTheme.white,
+                            checkmarkColor: AppTheme.trueWhite,
                             labelStyle: textTheme.bodySmall?.copyWith(
                               color: isSelected
                                   ? AppTheme.white
@@ -374,7 +371,7 @@ class _CollectionPageState extends State<CollectionPage> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.orange500,
-                          foregroundColor: AppTheme.white,
+                          foregroundColor: AppTheme.trueWhite,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -410,7 +407,7 @@ class _CollectionPageState extends State<CollectionPage> {
               BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
-                  color: AppTheme.glassLight,
+                  color: AppTheme.white,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                     child: Column(
@@ -716,7 +713,7 @@ class _CollectionPageState extends State<CollectionPage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppTheme.gray100),
+        side: BorderSide(color: AppTheme.gray100),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -809,7 +806,7 @@ class _CollectionPageState extends State<CollectionPage> {
                       if (item.publisher != null && item.publisher!.isNotEmpty)
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               LucideIcons.building,
                               size: 14,
                               color: AppTheme.gray500,
@@ -838,7 +835,7 @@ class _CollectionPageState extends State<CollectionPage> {
                               value: item.progressRatio,
                               minHeight: 6,
                               borderRadius: BorderRadius.circular(999),
-                              backgroundColor: AppTheme.orange100,
+                              backgroundColor: AppTheme.progressTrack,
                               valueColor: const AlwaysStoppedAnimation<Color>(
                                 AppTheme.orange500,
                               ),
@@ -847,7 +844,7 @@ class _CollectionPageState extends State<CollectionPage> {
                           const SizedBox(width: 8),
                           Text(
                             '${(item.progressRatio * 100).round()}%',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Manrope',
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
@@ -865,7 +862,7 @@ class _CollectionPageState extends State<CollectionPage> {
               ),
               // Action menu
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   LucideIcons.ellipsisVertical,
                   size: 20,
                   color: AppTheme.gray500,
@@ -886,7 +883,7 @@ class _CollectionPageState extends State<CollectionPage> {
   Widget _buildPlaceholder() {
     return Container(
       color: AppTheme.orange50,
-      child: const Center(
+      child: Center(
         child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 34),
       ),
     );
@@ -955,7 +952,7 @@ class _CollectionPageState extends State<CollectionPage> {
                   ),
                   child: Text(
                     tag,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -969,7 +966,7 @@ class _CollectionPageState extends State<CollectionPage> {
             if (remainingCount > 0)
               Text(
                 '+$remainingCount meer',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -1174,7 +1171,7 @@ class _CollectionPageState extends State<CollectionPage> {
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -1184,14 +1181,14 @@ class _CollectionPageState extends State<CollectionPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 description,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
@@ -1312,7 +1309,7 @@ class _GridCoverCardState extends State<_GridCoverCard> {
   Widget _placeholder() {
     return Container(
       color: AppTheme.orange50,
-      child: const Center(
+      child: Center(
         child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 28),
       ),
     );
@@ -1386,7 +1383,7 @@ class _GridCoverCardState extends State<_GridCoverCard> {
                       const SizedBox(width: 4),
                       Text(
                         platformName.isNotEmpty ? platformName : '?',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Manrope',
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
@@ -1425,7 +1422,7 @@ class _GridCoverCardState extends State<_GridCoverCard> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(
-                        color: AppTheme.white,
+                        color: AppTheme.trueWhite,
                         fontWeight: FontWeight.w600,
                         height: 1.3,
                       ),

@@ -825,7 +825,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
           File(item.customCoverPath!),
           fit: BoxFit.cover,
           gaplessPlayback: true,
-          errorBuilder: (ctx, err, stack) => const Center(
+          errorBuilder: (ctx, err, stack) => Center(
             child: Icon(
               LucideIcons.gamepad2,
               size: 32,
@@ -840,7 +840,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
         child: Image.network(
           item.coverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (ctx, err, stack) => const Center(
+          errorBuilder: (ctx, err, stack) => Center(
             child: Icon(
               LucideIcons.gamepad2,
               size: 32,
@@ -850,7 +850,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
         ),
       );
     }
-    return const Center(
+    return Center(
       child: Icon(LucideIcons.gamepad2, size: 32, color: AppTheme.gray300),
     );
   }
@@ -969,7 +969,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: textTheme.bodySmall?.copyWith(
-                                color: AppTheme.white,
+                                color: AppTheme.trueWhite,
                                 fontWeight: FontWeight.w600,
                                 height: 1.3,
                               ),
@@ -1059,8 +1059,8 @@ class _CoverBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bgColor = filled ? AppTheme.orange500 : AppTheme.orange50;
-    final iconColor = filled ? AppTheme.white : AppTheme.orange500;
-    final textColor = filled ? AppTheme.white : AppTheme.orange700;
+    final iconColor = filled ? AppTheme.trueWhite : AppTheme.orange500;
+    final textColor = filled ? AppTheme.trueWhite : AppTheme.orange700;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
@@ -1255,7 +1255,7 @@ class _TrendingGameCard extends StatelessWidget {
                   ? Image.network(
                       game.coverUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (ctx, error, stack) => const Center(
+                      errorBuilder: (ctx, error, stack) => Center(
                         child: Icon(
                           LucideIcons.gamepad2,
                           size: 32,
@@ -1263,7 +1263,7 @@ class _TrendingGameCard extends StatelessWidget {
                         ),
                       ),
                     )
-                  : const Center(
+                  : Center(
                       child: Icon(
                         LucideIcons.gamepad2,
                         size: 32,
@@ -1292,7 +1292,7 @@ class _TrendingGameCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: textTheme.bodySmall?.copyWith(
-                    color: AppTheme.white,
+                    color: AppTheme.trueWhite,
                     fontWeight: FontWeight.w600,
                     height: 1.3,
                   ),

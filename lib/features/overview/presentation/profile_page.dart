@@ -10,6 +10,7 @@ import '../../../core/sync/auth_service.dart';
 import '../../../core/sync/connectivity_service.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_theme_controller.dart';
 import 'auth_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -121,7 +122,7 @@ class _ProfilePageState extends State<ProfilePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'App resetten?',
                       style: TextStyle(
@@ -134,12 +135,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Alle games, speelduur, notities, achievements en instellingen worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -201,14 +202,18 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         bottom: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── Account ──────────────────────────────────────────────────
               _buildSectionLabel('Account'),
               ..._buildAccountSection(context),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              // ── Weergave (thema) ────────────────────────────────────────
+              _buildSectionLabel('Weergave'),
+              _buildThemeRow(),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               // ── Notifications ──────────────────────────────────────────────
               _buildSectionLabel('Meldingen'),
               _buildToggleRow(
@@ -246,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   }
                 },
               ),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               // ── Data ────────────────────────────────────────────────────
               _buildSectionLabel('Gegevens'),
               _buildActionRow(
@@ -257,7 +262,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 iconColor: AppTheme.orange500,
                 onTap: () => _showResetConfirmSheet(context),
               ),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               // ── App info ────────────────────────────────────────────────
               _buildSectionLabel('Over de app'),
               _buildInfoRow(
@@ -265,7 +270,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: 'GameCollect',
                 value: _version.isEmpty ? '—' : 'Versie $_version',
               ),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
             ],
           ),
         ),
@@ -278,7 +283,7 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -347,12 +352,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       );
                   },
             icon: sync.isSyncing
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppTheme.white,
+                      color: AppTheme.trueWhite,
                     ),
                   )
                 : const Icon(LucideIcons.refreshCw, size: 20),
@@ -366,7 +371,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.orange500,
                   side: const BorderSide(color: AppTheme.orange500, width: 2),
-                  disabledForegroundColor: AppTheme.white,
+                  disabledForegroundColor: AppTheme.trueWhite,
                   disabledBackgroundColor: AppTheme.orange100,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -449,7 +454,7 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -459,7 +464,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
@@ -499,7 +504,7 @@ class _ProfilePageState extends State<ProfilePage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text(
+          title: Text(
             'Account loskoppelen?',
             style: TextStyle(
               fontFamily: 'Manrope',
@@ -508,7 +513,7 @@ class _ProfilePageState extends State<ProfilePage> {
               color: AppTheme.black,
             ),
           ),
-          content: const Text(
+          content: Text(
             'Cloud-sync stopt. Nieuwe wijzigingen worden niet meer naar de cloud gestuurd. '
             'Je lokale gegevens blijven op dit toestel staan en je gegevens in de cloud blijven bewaard. '
             'Je kunt later opnieuw aanmelden om verder te synchroniseren.',
@@ -560,7 +565,7 @@ class _ProfilePageState extends State<ProfilePage> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
@@ -570,7 +575,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Manrope',
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -580,6 +585,163 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
     );
+  }
+
+  Widget _buildThemeRow() {
+    final controller = AppThemeController.instance;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return InkWell(
+          onTap: () => _showThemeSheet(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+            child: Row(
+              children: [
+                Icon(LucideIcons.moonStar, size: 18, color: AppTheme.orange500),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Donker thema',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                ),
+                Text(
+                  _labelForMode(controller.mode),
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: AppTheme.gray500,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _labelForMode(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return 'Automatisch';
+      case ThemeMode.light:
+        return 'Licht';
+      case ThemeMode.dark:
+        return 'Donker';
+    }
+  }
+
+  Future<void> _showThemeSheet(BuildContext context) async {
+    final controller = AppThemeController.instance;
+    final selected = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        final current = controller.mode;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 40,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Thema aanpassen',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.black,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Kies hoe de app eruit ziet. Bij Automatisch volgt de app de '
+                'systeeminstellingen van je toestel.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
+                  color: AppTheme.gray700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [ThemeMode.system, ThemeMode.light, ThemeMode.dark]
+                    .map((mode) {
+                      final isSelected = current == mode;
+                      return ChoiceChip(
+                        showCheckmark: false,
+                        label: Text(_labelForMode(mode)),
+                        selected: isSelected,
+                        onSelected: (s) {
+                          if (s) Navigator.of(sheetContext).pop(mode);
+                        },
+                        selectedColor: AppTheme.orange500,
+                        labelStyle: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? AppTheme.trueWhite
+                              : AppTheme.black,
+                        ),
+                        backgroundColor: AppTheme.white,
+                        shape: StadiumBorder(
+                          side: BorderSide(
+                            color: isSelected
+                                ? AppTheme.orange500
+                                : AppTheme.orange200,
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await controller.setMode(selected);
+    }
   }
 
   Widget _buildToggleRow({
@@ -601,7 +763,7 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
@@ -612,7 +774,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
@@ -668,7 +830,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -679,7 +841,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
@@ -690,11 +852,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-            const Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: AppTheme.gray300,
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
           ],
         ),
       ),
@@ -725,7 +883,7 @@ class _RestartPromptScreen extends StatelessWidget {
                 color: AppTheme.orange500,
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'App resetten gelukt',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -736,7 +894,7 @@ class _RestartPromptScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Alle gegevens zijn verwijderd. Sluit de app af en open hem opnieuw om opnieuw te beginnen.',
                 style: TextStyle(
                   fontFamily: 'Manrope',

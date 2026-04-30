@@ -148,7 +148,7 @@ class _AuthPageState extends State<AuthPage> {
             children: [
               _buildModeSwitcher(),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Synchroniseer je collectie veilig met de cloud. Je gegevens '
                 'blijven ook lokaal beschikbaar wanneer je offline bent.',
                 style: TextStyle(
@@ -328,14 +328,14 @@ class _AuthPageState extends State<AuthPage> {
         obscureText: obscure,
         keyboardType: keyboard,
         autocorrect: false,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 16,
           color: AppTheme.black,
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             fontFamily: 'Manrope',
             fontSize: 16,
             color: AppTheme.gray500,
@@ -360,7 +360,7 @@ Future<InitialSyncStrategy?> _showStrategyDialog(BuildContext context) {
       return AlertDialog(
         backgroundColor: AppTheme.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Gegevens samenvoegen',
           style: TextStyle(
             fontFamily: 'Manrope',
@@ -369,7 +369,7 @@ Future<InitialSyncStrategy?> _showStrategyDialog(BuildContext context) {
             color: AppTheme.black,
           ),
         ),
-        content: const Text(
+        content: Text(
           'Je hebt zowel lokaal als in de cloud al gegevens. Hoe wil je '
           'deze combineren?',
           style: TextStyle(
@@ -456,7 +456,7 @@ class _StrategyAction extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -466,7 +466,7 @@ class _StrategyAction extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
@@ -476,11 +476,7 @@ class _StrategyAction extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: AppTheme.gray300,
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
           ],
         ),
       ),

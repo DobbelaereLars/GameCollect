@@ -127,7 +127,7 @@ class _GameCollectShellState extends State<GameCollectShell> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(LucideIcons.trophy, size: 18, color: AppTheme.white),
+            Icon(LucideIcons.trophy, size: 18, color: AppTheme.trueWhite),
             const SizedBox(width: 10),
             Expanded(child: Text(message)),
           ],

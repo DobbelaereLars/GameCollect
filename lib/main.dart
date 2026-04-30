@@ -11,6 +11,7 @@ import 'core/notifications/notification_service.dart';
 import 'core/sync/auth_service.dart';
 import 'core/sync/connectivity_service.dart';
 import 'core/sync/sync_service.dart';
+import 'core/theme/app_theme_controller.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -20,6 +21,9 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Laad de opgeslagen thema-voorkeur (auto/licht/donker) zodra mogelijk.
+  await AppThemeController.instance.initialize();
 
   // Keep running even if .env is missing; the Discover page shows a clear message.
   try {

@@ -135,7 +135,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
         scrolledUnderElevation: 0,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft, color: AppTheme.black),
+          icon: Icon(LucideIcons.chevronLeft, color: AppTheme.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -226,7 +226,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
               child: Image.network(
                 coverUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Center(
+                errorBuilder: (_, __, ___) => Center(
                   child: Icon(
                     LucideIcons.gamepad2,
                     size: 64,

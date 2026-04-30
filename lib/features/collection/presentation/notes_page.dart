@@ -122,7 +122,7 @@ class _NotesPageState extends State<NotesPage> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Notities wissen',
           style: TextStyle(
             fontFamily: 'Manrope',
@@ -132,7 +132,7 @@ class _NotesPageState extends State<NotesPage> {
             color: AppTheme.black,
           ),
         ),
-        content: const Text(
+        content: Text(
           'Ben je zeker dat je alle notities wil verwijderen?',
           style: TextStyle(
             fontFamily: 'Manrope',
@@ -195,7 +195,7 @@ class _NotesPageState extends State<NotesPage> {
             icon: const Icon(LucideIcons.chevronLeft),
             onPressed: _popWithSave,
           ),
-          title: const Text(
+          title: Text(
             'Notities',
             style: TextStyle(
               fontFamily: 'Manrope',
@@ -250,14 +250,14 @@ class _NotesPageState extends State<NotesPage> {
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
                 cursorColor: AppTheme.orange500,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
                   height: 1.7,
                   color: AppTheme.black,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Begin met typen...',
                   hintStyle: TextStyle(
                     fontFamily: 'Manrope',

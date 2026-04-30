@@ -68,14 +68,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       hintText: hintText,
       labelText: labelText,
       isDense: isDense,
-      hintStyle: const TextStyle(
-        fontFamily: 'Manrope',
-        color: AppTheme.gray500,
-      ),
-      labelStyle: const TextStyle(
-        fontFamily: 'Manrope',
-        color: AppTheme.orange700,
-      ),
+      hintStyle: TextStyle(fontFamily: 'Manrope', color: AppTheme.gray500),
+      labelStyle: TextStyle(fontFamily: 'Manrope', color: AppTheme.orange700),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppTheme.orange300),
@@ -123,6 +117,38 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       item.apiId,
       item.achievementStates,
     );
+
+    // Auto-fetch from RAWG when the game has achievement states (synced from
+    // Firebase) but the local game_achievements table has no definitions yet.
+    // This happens when a collection item is restored on a new device.
+    if (achievements.isEmpty && item.achievementStates.isNotEmpty) {
+      final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      if (apiKey.isNotEmpty) {
+        final client = http.Client();
+        try {
+          final api = const RawgGamesApi();
+          final fetched = await api.fetchGameAchievements(
+            client: client,
+            apiKey: apiKey,
+            id: item.apiId,
+          );
+          if (fetched.isNotEmpty) {
+            await DatabaseHelper.instance.upsertAchievementsForGame(
+              item.apiId,
+              fetched,
+            );
+            achievements = await DatabaseHelper.instance
+                .getAchievementsWithStates(item.apiId, item.achievementStates);
+          }
+        } catch (e) {
+          debugPrint(
+            '[GameCollect] Auto-fetch achievements na sync mislukt: $e',
+          );
+        } finally {
+          client.close();
+        }
+      }
+    }
 
     // If achievements exist in game_achievements but states aren't tracked yet
     // (e.g. game was added before this feature), initialise them.
@@ -269,10 +295,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                         ),
                         IconButton(
                           onPressed: () => Navigator.of(sheetContext).pop(),
-                          icon: const Icon(
-                            LucideIcons.x,
-                            color: AppTheme.black,
-                          ),
+                          icon: Icon(LucideIcons.x, color: AppTheme.black),
                         ),
                       ],
                     ),
@@ -281,7 +304,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               LucideIcons.arrowLeft,
                               color: AppTheme.black,
                             ),
@@ -341,7 +364,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                     const SizedBox(height: 16),
                     if (step == 0) ...[
                       if (!hasSuggestedTags)
-                        const Text(
+                        Text(
                           'Geen voorgestelde tags beschikbaar voor deze game.',
                           style: TextStyle(
                             fontFamily: 'Manrope',
@@ -408,7 +431,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                   _maxCustomTagLength,
                                 ),
                               ],
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Manrope',
                                 color: AppTheme.black,
                               ),
@@ -450,9 +473,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                                   : () => addCustomTag(setSheetState),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.orange500,
-                                foregroundColor: AppTheme.white,
+                                foregroundColor: AppTheme.trueWhite,
                                 disabledBackgroundColor: AppTheme.orange100,
-                                disabledForegroundColor: AppTheme.white,
+                                disabledForegroundColor: AppTheme.trueWhite,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -556,9 +579,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.orange500,
-                        foregroundColor: AppTheme.white,
+                        foregroundColor: AppTheme.trueWhite,
                         disabledBackgroundColor: AppTheme.orange100,
-                        disabledForegroundColor: AppTheme.white,
+                        disabledForegroundColor: AppTheme.trueWhite,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -792,7 +815,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 const SizedBox(height: 16),
                 Text(
                   achievement.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -804,7 +827,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   const SizedBox(height: 8),
                   Text(
                     achievement.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
@@ -817,7 +840,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         LucideIcons.users,
                         size: 14,
                         color: AppTheme.gray500,
@@ -825,7 +848,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       const SizedBox(width: 6),
                       Text(
                         '${achievement.percent!.toStringAsFixed(1)}% van spelers behaald',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Manrope',
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -869,7 +892,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 if (requirement.title?.isNotEmpty == true) ...[
                   Text(
                     requirement.title!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
@@ -880,7 +903,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   const SizedBox(height: 8),
                   Text(
                     requirement.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
@@ -891,7 +914,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 ] else
                   Text(
                     requirement.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Manrope',
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
@@ -937,7 +960,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Vereiste verwijderen?',
                     style: TextStyle(
                       fontFamily: 'Manrope',
@@ -948,12 +971,12 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Deze vereiste wordt permanent verwijderd uit je collectie.',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -1135,13 +1158,13 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                             color: AppTheme.orange500,
                             borderRadius: BorderRadius.circular(3),
                           ),
-                          child: const Text(
+                          child: Text(
                             '100%',
                             style: TextStyle(
                               fontFamily: 'Manrope',
                               fontSize: 7,
                               fontWeight: FontWeight.w700,
-                              color: AppTheme.white,
+                              color: AppTheme.trueWhite,
                               height: 1.2,
                             ),
                           ),
@@ -1169,28 +1192,16 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                     _buildHeader(item),
                     if (_achievements.isNotEmpty) ...[
                       const SizedBox(height: 24),
-                      const Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: AppTheme.gray100,
-                      ),
+                      Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                       const SizedBox(height: 24),
                       _buildAchievementsSection(),
                     ],
                     const SizedBox(height: 24),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppTheme.gray100,
-                    ),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
                     _buildRequirementsSection(),
                     const SizedBox(height: 24),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppTheme.gray100,
-                    ),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
                     _buildPlaytimeSummaryTile(item),
                     const SizedBox(height: 8),
@@ -1206,7 +1217,12 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             bottom: MediaQuery.of(context).padding.bottom + 16,
             child: Container(
               decoration: BoxDecoration(
-                color: AppTheme.white,
+                // In light mode wit met schaduw; in dark mode iets lichtere
+                // surface (#2A2A2A) zodat de bol-vorm zichtbaar blijft
+                // tegen de #121212 scaffold.
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppTheme.gray100
+                    : AppTheme.white,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
@@ -1319,7 +1335,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         const SizedBox(height: 14),
         Text(
           item.title,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Manrope',
             fontSize: 32,
             fontWeight: FontWeight.w700,
@@ -1343,7 +1359,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 ),
                 child: Text(
                   tag,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1384,7 +1400,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 value: item.progressRatio,
                 minHeight: 8,
                 borderRadius: BorderRadius.circular(999),
-                backgroundColor: AppTheme.orange100,
+                backgroundColor: AppTheme.progressTrack,
                 valueColor: const AlwaysStoppedAnimation<Color>(
                   AppTheme.orange500,
                 ),
@@ -1393,7 +1409,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             const SizedBox(width: 10),
             Text(
               '${(item.progressRatio * 100).round()}%',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -1410,8 +1426,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   Widget _buildHeaderMetaRow({
     required IconData icon,
     required String text,
-    Color textColor = AppTheme.gray500,
+    Color? textColor,
   }) {
+    final color = textColor ?? AppTheme.gray500;
     return Row(
       children: [
         Icon(icon, size: 14, color: AppTheme.gray500),
@@ -1426,7 +1443,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               fontSize: 12,
               fontWeight: FontWeight.w400,
               height: 1.4,
-              color: textColor,
+              color: color,
             ),
           ),
         ),
@@ -1525,7 +1542,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   Widget _buildCoverPlaceholder() {
     return Container(
       color: AppTheme.orange50,
-      child: const Center(
+      child: Center(
         child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 30),
       ),
     );
@@ -1577,7 +1594,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Speelduur',
                     style: TextStyle(
                       fontFamily: 'Manrope',
@@ -1602,11 +1619,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 ],
               ),
             ),
-            const Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: AppTheme.gray300,
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
           ],
         ),
       ),
@@ -1647,7 +1660,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1672,11 +1685,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 ],
               ),
             ),
-            const Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: AppTheme.gray300,
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
           ],
         ),
       ),
@@ -1704,7 +1713,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         // Header row
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Achievements',
                 style: TextStyle(
@@ -1785,7 +1794,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 child: Text(
                   '${safePage + 1} / $totalPages',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1955,7 +1964,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Vereisten',
                 style: TextStyle(
@@ -2033,7 +2042,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
               'Nog geen vereisten. Tik op + om er een toe te voegen.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
@@ -2060,7 +2069,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 child: Text(
                   '${safePage + 1} / $totalPages',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -2104,7 +2113,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                       value ?? false,
                     ),
               activeColor: AppTheme.orange500,
-              side: const BorderSide(color: AppTheme.gray300),
+              side: BorderSide(color: AppTheme.gray300),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
             ),
@@ -2147,7 +2156,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
           ),
           GestureDetector(
             onTap: () => _showDeleteRequirementConfirmSheet(requirement.id),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(6),
               child: Icon(
                 LucideIcons.trash2,
@@ -2208,10 +2217,7 @@ class _AddRequirementSheetContentState
     return InputDecoration(
       labelText: labelText,
       isDense: isDense,
-      labelStyle: const TextStyle(
-        fontFamily: 'Manrope',
-        color: AppTheme.orange700,
-      ),
+      labelStyle: TextStyle(fontFamily: 'Manrope', color: AppTheme.orange700),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppTheme.orange300),
@@ -2254,7 +2260,7 @@ class _AddRequirementSheetContentState
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  icon: Icon(LucideIcons.x, color: AppTheme.black),
                 ),
               ],
             ),
@@ -2263,10 +2269,7 @@ class _AddRequirementSheetContentState
               controller: _titleController,
               cursorColor: AppTheme.orange600,
               inputFormatters: [LengthLimitingTextInputFormatter(30)],
-              style: const TextStyle(
-                fontFamily: 'Manrope',
-                color: AppTheme.black,
-              ),
+              style: TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
               decoration:
                   _orangeDecoration(
                     labelText: 'Titel (optioneel)',
@@ -2294,10 +2297,7 @@ class _AddRequirementSheetContentState
               cursorColor: AppTheme.orange600,
               inputFormatters: [LengthLimitingTextInputFormatter(250)],
               maxLines: 4,
-              style: const TextStyle(
-                fontFamily: 'Manrope',
-                color: AppTheme.black,
-              ),
+              style: TextStyle(fontFamily: 'Manrope', color: AppTheme.black),
               decoration:
                   _orangeDecoration(
                     labelText: 'Beschrijving',
@@ -2340,11 +2340,11 @@ class _AddRequirementSheetContentState
                         }
                       : null,
                   icon: _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                            color: AppTheme.white,
+                            color: AppTheme.trueWhite,
                             strokeWidth: 2,
                           ),
                         )
@@ -2355,9 +2355,9 @@ class _AddRequirementSheetContentState
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.orange500,
-                    foregroundColor: AppTheme.white,
+                    foregroundColor: AppTheme.trueWhite,
                     disabledBackgroundColor: AppTheme.orange100,
-                    disabledForegroundColor: AppTheme.white,
+                    disabledForegroundColor: AppTheme.trueWhite,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -2511,7 +2511,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Afbeelding herstellen?',
                     style: TextStyle(
                       fontFamily: 'Manrope',
@@ -2522,12 +2522,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Je eigen afbeelding wordt verwijderd en de standaard omslagafbeelding wordt hersteld.',
                 style: TextStyle(
                   fontFamily: 'Manrope',
@@ -2611,7 +2611,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Formaat aanpassen',
                       style: TextStyle(
@@ -2624,7 +2624,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
@@ -2632,7 +2632,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               Text(
                 'Selecteer de vorm waarin je deze game bezit op '
                 '${widget.platformName}.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
@@ -2692,7 +2692,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
           children: [
             const Icon(LucideIcons.disc3, size: 18, color: AppTheme.orange500),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Formaat',
                 style: TextStyle(
@@ -2705,7 +2705,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
             ),
             Text(
               _currentFormat,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -2713,11 +2713,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(
-              LucideIcons.chevronRight,
-              size: 18,
-              color: AppTheme.gray500,
-            ),
+            Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.gray500),
           ],
         ),
       ),
@@ -2753,24 +2749,24 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
             children: [
               _buildCoverSection(),
               const SizedBox(height: 24),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildCompletedRow(),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildFormatRow(),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               if (_availablePlatforms
                   .where((p) => !_alreadyAddedPlatformNames.contains(p))
                   .isNotEmpty) ...[
                 _buildAddPlatformRow(),
-                const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               ],
               _buildRefreshDataRow(),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               _buildDeleteFromPlatformRow(),
-              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               if (_hasMultiplePlatforms) ...[
                 _buildDeleteFromAllRow(),
-                const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               ],
             ],
           ),
@@ -2810,7 +2806,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   child: TextButton.icon(
                     onPressed: _showRestoreCoverSheet,
                     style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.white,
+                      foregroundColor: AppTheme.trueWhite,
                       padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                     ),
                     icon: const Icon(LucideIcons.refreshCcw, size: 16),
@@ -2897,7 +2893,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
           Expanded(
             child: Text(
               '100% voltooid',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
@@ -2961,7 +2957,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   Expanded(
                     child: Text(
                       '${widget.item.title} verwijderen?',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -2971,7 +2967,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
@@ -2980,7 +2976,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                 isLastPlatform
                     ? 'De game wordt volledig verwijderd uit je collectie. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.'
                     : 'De game wordt verwijderd van ${widget.platformName}. Al je voortgang, speelduur en instellingen voor dit platform gaan permanent verloren.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
@@ -3070,7 +3066,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   Expanded(
                     child: Text(
                       '${widget.item.title} volledig verwijderen?',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -3080,12 +3076,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                    icon: Icon(LucideIcons.x, color: AppTheme.black),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'De game wordt van elk platform verwijderd. Al je voortgang, speelduur, achievements en instellingen gaan permanent verloren.',
                 style: TextStyle(
                   fontFamily: 'Manrope',

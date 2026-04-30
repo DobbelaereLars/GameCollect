@@ -248,7 +248,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
                 });
               },
               selectedColor: AppTheme.orange500,
-              checkmarkColor: AppTheme.white,
+              checkmarkColor: AppTheme.trueWhite,
               labelStyle: textTheme.bodySmall?.copyWith(
                 color: isSelected ? AppTheme.white : AppTheme.black,
                 fontWeight: FontWeight.w600,
@@ -269,9 +269,9 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
               : _nextStep,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.orange500,
-            foregroundColor: AppTheme.white,
+            foregroundColor: AppTheme.trueWhite,
             disabledBackgroundColor: AppTheme.orange100,
-            disabledForegroundColor: AppTheme.white,
+            disabledForegroundColor: AppTheme.trueWhite,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -308,7 +308,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
           children: [
             if (widget.game.platforms.length > 1) ...[
               IconButton(
-                icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.black),
+                icon: Icon(LucideIcons.arrowLeft, color: AppTheme.black),
                 onPressed: _previousStep,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -372,21 +372,21 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
           onPressed: _isSaving ? null : _nextStep,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.orange500,
-            foregroundColor: AppTheme.white,
+            foregroundColor: AppTheme.trueWhite,
             disabledBackgroundColor: AppTheme.orange500.withValues(alpha: 0.6),
-            disabledForegroundColor: AppTheme.white,
+            disabledForegroundColor: AppTheme.trueWhite,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
           ),
           child: isLastStep && _isSaving
-              ? const SizedBox(
+              ? SizedBox(
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.5,
-                    color: AppTheme.white,
+                    color: AppTheme.trueWhite,
                   ),
                 )
               : Row(
@@ -432,7 +432,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(LucideIcons.x, color: AppTheme.black),
+                  icon: Icon(LucideIcons.x, color: AppTheme.black),
                   onPressed: _isSaving
                       ? null
                       : () => Navigator.of(context).pop(),

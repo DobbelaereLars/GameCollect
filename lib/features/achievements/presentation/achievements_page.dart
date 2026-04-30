@@ -118,7 +118,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
               const SizedBox(height: 16),
               Text(
                 achievement.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -129,7 +129,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
               const SizedBox(height: 8),
               Text(
                 achievement.description,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
@@ -162,15 +162,11 @@ class _AchievementsPageState extends State<AchievementsPage> {
               ] else if (!isUnlocked && achievement.targetCount > 1) ...[
                 Row(
                   children: [
-                    const Icon(
-                      LucideIcons.target,
-                      size: 14,
-                      color: AppTheme.gray500,
-                    ),
+                    Icon(LucideIcons.target, size: 14, color: AppTheme.gray500),
                     const SizedBox(width: 6),
                     Text(
                       p.progressLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Manrope',
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
@@ -181,7 +177,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
                   ],
                 ),
               ] else if (!isUnlocked) ...[
-                const Row(
+                Row(
                   children: [
                     Icon(LucideIcons.lock, size: 14, color: AppTheme.gray500),
                     SizedBox(width: 6),
@@ -276,13 +272,13 @@ class _AchievementsPageState extends State<AchievementsPage> {
     return Column(
       children: [
         _buildSummaryBar(),
-        const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+        Divider(height: 1, thickness: 1, color: AppTheme.gray100),
         Expanded(
           child: ListView.separated(
             controller: _scrollController,
             padding: const EdgeInsets.only(bottom: 90),
             itemCount: _progress.length,
-            separatorBuilder: (context, index) => const Divider(
+            separatorBuilder: (context, index) => Divider(
               height: 1,
               thickness: 1,
               indent: 72,
@@ -321,7 +317,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
           const SizedBox(height: 6),
           Text(
             '${(ratio * 100).round()}% van alle achievements behaald',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Manrope',
               fontSize: 12,
               color: AppTheme.gray500,
@@ -406,7 +402,7 @@ class _AchievementRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         progress.progressLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Manrope',
                           fontSize: 11,
                           color: AppTheme.gray500,
@@ -425,7 +421,7 @@ class _AchievementRow extends StatelessWidget {
                   color: AppTheme.orange500,
                 )
               else
-                const Icon(LucideIcons.lock, size: 18, color: AppTheme.gray300),
+                Icon(LucideIcons.lock, size: 18, color: AppTheme.gray300),
             ],
           ),
         ),

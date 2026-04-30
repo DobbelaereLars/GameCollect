@@ -494,7 +494,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
-              color: AppTheme.glassLight,
+              color: AppTheme.white,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Column(
@@ -684,7 +684,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 Container(
                   color: AppTheme.orange50,
                   child: game.coverUrl == null
-                      ? const Icon(
+                      ? Icon(
                           LucideIcons.gamepad2,
                           size: 34,
                           color: AppTheme.gray300,
@@ -692,7 +692,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       : Image.network(
                           game.coverUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
+                          errorBuilder: (_, __, ___) => Icon(
                             LucideIcons.gamepad2,
                             size: 34,
                             color: AppTheme.gray300,
@@ -730,7 +730,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                   ? textTheme.bodySmall
                                   : textTheme.bodyMedium)
                               ?.copyWith(
-                                color: AppTheme.white,
+                                color: AppTheme.trueWhite,
                                 fontWeight: FontWeight.w600,
                               ),
                     ),

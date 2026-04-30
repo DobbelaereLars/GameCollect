@@ -63,7 +63,7 @@ class DiscoverSearchBar extends StatelessWidget {
                   return IconButton(
                     onPressed: onClearPressed,
                     tooltip: 'Wis zoekterm',
-                    icon: const Icon(
+                    icon: Icon(
                       LucideIcons.x,
                       color: AppTheme.gray700,
                       size: 16,
@@ -73,11 +73,11 @@ class DiscoverSearchBar extends StatelessWidget {
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.orange200),
+                borderSide: BorderSide(color: AppTheme.orange200),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.orange200),
+                borderSide: BorderSide(color: AppTheme.orange200),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
