@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -16,6 +17,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   String _version = '';
+  bool _notificationsEnabled = false;
 
   @override
   void initState() {
@@ -23,6 +25,23 @@ class _ProfilePageState extends State<ProfilePage> {
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _version = info.version);
     });
+    _syncNotificationState();
+  }
+
+  Future<void> _syncNotificationState() async {
+    final systemGranted =
+        await NotificationService.instance.arePermissionsGranted();
+    final dbEnabled =
+        await DatabaseHelper.instance.getNotificationsEnabled();
+
+    // If system permission is revoked, correct the DB so it stays in sync.
+    if (!systemGranted && dbEnabled) {
+      await DatabaseHelper.instance.setNotificationsEnabled(false);
+    }
+
+    if (mounted) {
+      setState(() => _notificationsEnabled = systemGranted && dbEnabled);
+    }
   }
 
   // ── Reset ─────────────────────────────────────────────────────────────────
@@ -155,12 +174,41 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── App info ────────────────────────────────────────────────
-              _buildSectionLabel('Over de app'),
-              _buildInfoRow(
-                icon: LucideIcons.gamepad2,
-                label: 'GameCollect',
-                value: _version.isEmpty ? '—' : 'Versie $_version',
+              // ── Notifications ──────────────────────────────────────────────
+              _buildSectionLabel('Meldingen'),
+              _buildToggleRow(
+                icon: LucideIcons.bell,
+                label: 'Meldingen inschakelen',
+                subtitle: 'Herinneringen en voortgangsmeldingen',
+                value: _notificationsEnabled,
+                onChanged: (val) async {
+                  if (val) {
+                    final granted = await NotificationService.instance
+                        .requestPermissions();
+                    if (!granted) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context)
+                          ..clearSnackBars()
+                          ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Sta meldingen toe in Instellingen van je apparaat.',
+                            ),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    setState(() => _notificationsEnabled = true);
+                    await DatabaseHelper.instance.setNotificationsEnabled(true);
+                    await NotificationService.instance.scheduleAll();
+                  } else {
+                    setState(() => _notificationsEnabled = false);
+                    await DatabaseHelper.instance
+                        .setNotificationsEnabled(false);
+                    await NotificationService.instance.cancelAll();
+                  }
+                },
               ),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
               // ── Data ────────────────────────────────────────────────────
@@ -172,6 +220,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 subtitle: 'Verwijdert alle games en gegevens',
                 iconColor: AppTheme.orange500,
                 onTap: () => _showResetConfirmSheet(context),
+              ),
+              const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+              // ── App info ────────────────────────────────────────────────
+              _buildSectionLabel('Over de app'),
+              _buildInfoRow(
+                icon: LucideIcons.gamepad2,
+                label: 'GameCollect',
+                value: _version.isEmpty ? '—' : 'Versie $_version',
               ),
               const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
             ],
@@ -226,6 +282,72 @@ class _ProfilePageState extends State<ProfilePage> {
               fontSize: 13,
               fontWeight: FontWeight.w400,
               color: AppTheme.gray500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleRow({
+    required IconData icon,
+    required String label,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppTheme.orange500),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.black,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(
+              switchTheme: SwitchThemeData(
+                thumbColor: WidgetStateProperty.all(AppTheme.white),
+                trackColor: WidgetStateProperty.resolveWith((states) {
+                  return states.contains(WidgetState.selected)
+                      ? AppTheme.orange500
+                      : AppTheme.orange100;
+                }),
+                trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+                thumbIcon: WidgetStateProperty.all(
+                  const Icon(Icons.circle, color: Colors.transparent, size: 1),
+                ),
+              ),
+            ),
+            child: Switch(
+              value: value,
+              onChanged: onChanged,
             ),
           ),
         ],

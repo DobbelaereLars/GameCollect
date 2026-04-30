@@ -172,9 +172,11 @@ class _GameCollectShellState extends State<GameCollectShell> {
     if (index == _currentIndex) {
       // Already on this tab: pop to root then scroll to top.
       if (index == 0) _overviewNavKey.currentState?.popUntil((r) => r.isFirst);
-      if (index == 1) _collectionNavKey.currentState?.popUntil((r) => r.isFirst);
+      if (index == 1)
+        _collectionNavKey.currentState?.popUntil((r) => r.isFirst);
       if (index == 2) _discoverNavKey.currentState?.popUntil((r) => r.isFirst);
-      if (index == 3) _achievementsNavKey.currentState?.popUntil((r) => r.isFirst);
+      if (index == 3)
+        _achievementsNavKey.currentState?.popUntil((r) => r.isFirst);
       _scrollToTopForTab(index);
       return;
     }

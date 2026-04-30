@@ -873,7 +873,7 @@ class _CollectionPageState extends State<CollectionPage> {
     return Container(
       color: AppTheme.orange50,
       child: const Center(
-        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 34),
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 34),
       ),
     );
   }
@@ -1299,7 +1299,7 @@ class _GridCoverCardState extends State<_GridCoverCard> {
     return Container(
       color: AppTheme.orange50,
       child: const Center(
-        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 28),
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 28),
       ),
     );
   }

@@ -29,7 +29,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -84,6 +84,12 @@ CREATE TABLE app_achievements (
 CREATE TABLE event_counters (
   key TEXT PRIMARY KEY,
   value INTEGER NOT NULL DEFAULT 0
+)
+''');
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 )
 ''');
   }
@@ -175,6 +181,14 @@ CREATE TABLE IF NOT EXISTS app_achievements (
 CREATE TABLE IF NOT EXISTS event_counters (
   key TEXT PRIMARY KEY,
   value INTEGER NOT NULL DEFAULT 0
+)
+''');
+    }
+    if (oldVersion < 10) {
+      await db.execute('''
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 )
 ''');
     }
@@ -447,5 +461,38 @@ CREATE TABLE IF NOT EXISTS event_counters (
       [key],
     );
     notifyListeners();
+  }
+
+  // ── Settings ────────────────────────────────────────────────────────────────
+
+  Future<String?> getSetting(String key) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await instance.database;
+    await db.execute(
+      'INSERT INTO settings (key, value) VALUES (?, ?) '
+      'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      [key, value],
+    );
+  }
+
+  Future<bool> getNotificationsEnabled() async {
+    final val = await getSetting('notificationsEnabled');
+    // Default to true if not set yet.
+    return val == null || val == '1';
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    await setSetting('notificationsEnabled', enabled ? '1' : '0');
   }
 }

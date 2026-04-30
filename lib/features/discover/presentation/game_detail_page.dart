@@ -289,48 +289,86 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   const SizedBox(height: 24),
                 ],
                 // Add to Collection / View in Collection Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isAlreadyInCollection
-                        ? () {
-                            CollectionPage.searchRequest.value = game.title;
+                Builder(builder: (context) {
+                  final released = game.released;
+                  final isNotYetReleased = released != null &&
+                      DateTime.tryParse(released) != null &&
+                      DateTime.parse(released).isAfter(DateTime.now());
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: isNotYetReleased
+                          ? null
+                          : _isAlreadyInCollection
+                              ? () {
+                                  CollectionPage.searchRequest.value =
+                                      game.title;
+                                }
+                              : () async {
+                                  await AddToCollectionSheet.show(
+                                      context, game);
+                                  _checkIfInCollection();
+                                },
+                      icon: Icon(
+                        isNotYetReleased
+                            ? LucideIcons.clock
+                            : _isAlreadyInCollection
+                                ? LucideIcons.library
+                                : LucideIcons.plus,
+                        size: 20,
+                      ),
+                      label: Text(
+                        isNotYetReleased
+                            ? 'Nog niet uitgebracht'
+                            : _isAlreadyInCollection
+                                ? 'Bekijk in collectie'
+                                : 'Toevoegen aan collectie',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: ButtonStyle(
+                        backgroundColor:
+                            WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return AppTheme.orange100;
                           }
-                        : () async {
-                            await AddToCollectionSheet.show(context, game);
-                            _checkIfInCollection();
-                          },
-                    icon: Icon(
-                      _isAlreadyInCollection
-                          ? LucideIcons.library
-                          : LucideIcons.plus,
-                      size: 20,
-                    ),
-                    label: Text(
-                      _isAlreadyInCollection
-                          ? 'Bekijk in collectie'
-                          : 'Toevoegen aan collectie',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isAlreadyInCollection
-                          ? AppTheme.orange500
-                          : AppTheme.white,
-                      foregroundColor: _isAlreadyInCollection
-                          ? AppTheme.white
-                          : AppTheme.orange500,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(
-                          color: AppTheme.orange500,
-                          width: 2,
+                          return _isAlreadyInCollection
+                              ? AppTheme.orange500
+                              : AppTheme.white;
+                        }),
+                        foregroundColor:
+                            WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return AppTheme.white;
+                          }
+                          return _isAlreadyInCollection
+                              ? AppTheme.white
+                              : AppTheme.orange500;
+                        }),
+                        padding: WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        elevation: WidgetStateProperty.all(0),
+                        shape: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            );
+                          }
+                          return RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: const BorderSide(
+                              color: AppTheme.orange500,
+                              width: 2,
+                            ),
+                          );
+                        }),
+                        overlayColor: WidgetStateProperty.all(
+                          Colors.transparent,
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                }),
                 const SizedBox(height: 24),
                 // Platform tags
                 if (game.platforms.isNotEmpty) ...[

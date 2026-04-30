@@ -623,7 +623,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       ? const Icon(
                           LucideIcons.gamepad2,
                           size: 34,
-                          color: AppTheme.black,
+                          color: AppTheme.gray300,
                         )
                       : Image.network(
                           game.coverUrl!,
@@ -631,7 +631,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           errorBuilder: (_, __, ___) => const Icon(
                             LucideIcons.gamepad2,
                             size: 34,
-                            color: AppTheme.black,
+                            color: AppTheme.gray300,
                           ),
                         ),
                 ),
