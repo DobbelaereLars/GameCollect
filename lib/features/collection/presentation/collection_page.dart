@@ -17,9 +17,9 @@ class CollectionPage extends StatefulWidget {
   /// The shell observes this to switch to the collection tab automatically.
   static final searchRequest = ValueNotifier<String?>(null);
 
-  /// Set this to an item ID to open that item's detail page within the Collectie tab.
-  /// The shell observes this to switch to tab 1; CollectionPage handles the push.
   static final itemDetailRequest = ValueNotifier<int?>(null);
+
+  static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
   State<CollectionPage> createState() => _CollectionPageState();
@@ -27,6 +27,7 @@ class CollectionPage extends StatefulWidget {
 
 class _CollectionPageState extends State<CollectionPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<CollectionItem> _allItems = [];
   List<CollectionItem> _filteredItems = [];
   bool _isLoading = true;
@@ -59,6 +60,7 @@ class _CollectionPageState extends State<CollectionPage> {
     DatabaseHelper.instance.addListener(_loadCollection);
     CollectionPage.searchRequest.addListener(_onSearchRequest);
     CollectionPage.itemDetailRequest.addListener(_onItemDetailRequest);
+    CollectionPage.scrollToTopRequest.addListener(_onScrollToTop);
     if (CollectionPage.searchRequest.value != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _onSearchRequest());
     }
@@ -72,10 +74,22 @@ class _CollectionPageState extends State<CollectionPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     DatabaseHelper.instance.removeListener(_loadCollection);
     CollectionPage.searchRequest.removeListener(_onSearchRequest);
     CollectionPage.itemDetailRequest.removeListener(_onItemDetailRequest);
+    CollectionPage.scrollToTopRequest.removeListener(_onScrollToTop);
     super.dispose();
+  }
+
+  void _onScrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _onSearchRequest() {
@@ -584,6 +598,7 @@ class _CollectionPageState extends State<CollectionPage> {
         }
       }
       return GridView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
@@ -611,6 +626,7 @@ class _CollectionPageState extends State<CollectionPage> {
     }
 
     return ListView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 90),
       itemCount: sortedPlatforms.length,
       itemBuilder: (context, index) {

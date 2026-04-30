@@ -9,11 +9,14 @@ import '../domain/app_achievement.dart';
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
 
+  static final scrollToTopRequest = ValueNotifier<int>(0);
+
   @override
   State<AchievementsPage> createState() => _AchievementsPageState();
 }
 
 class _AchievementsPageState extends State<AchievementsPage> {
+  final ScrollController _scrollController = ScrollController();
   List<AppAchievementProgress> _progress = [];
   bool _isLoading = true;
   int _loadGeneration = 0;
@@ -23,6 +26,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
     super.initState();
     _load();
     DatabaseHelper.instance.addListener(_onCollectionChanged);
+    AchievementsPage.scrollToTopRequest.addListener(_onScrollToTop);
     // When the shell unlocks achievements, we also refresh unread state
     AppAchievementService.newlyUnlockedNotifier.addListener(
       _onCollectionChanged,
@@ -35,7 +39,19 @@ class _AchievementsPageState extends State<AchievementsPage> {
     AppAchievementService.newlyUnlockedNotifier.removeListener(
       _onCollectionChanged,
     );
+    AchievementsPage.scrollToTopRequest.removeListener(_onScrollToTop);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _onCollectionChanged() {
@@ -263,6 +279,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
         const Divider(height: 1, thickness: 1, color: AppTheme.gray100),
         Expanded(
           child: ListView.separated(
+            controller: _scrollController,
             padding: const EdgeInsets.only(bottom: 90),
             itemCount: _progress.length,
             separatorBuilder: (context, index) => const Divider(

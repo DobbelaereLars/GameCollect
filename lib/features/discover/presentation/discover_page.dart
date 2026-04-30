@@ -25,6 +25,8 @@ class DiscoverPage extends StatefulWidget {
         ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
       >(null);
 
+  static final scrollToTopRequest = ValueNotifier<int>(0);
+
   @override
   State<DiscoverPage> createState() => _DiscoverPageState();
 }
@@ -67,6 +69,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     super.initState();
     _scrollController.addListener(_onScroll);
     DiscoverPage.gameDetailRequest.addListener(_onGameDetailRequest);
+    DiscoverPage.scrollToTopRequest.addListener(_onScrollToTop);
     _fetchGames(reset: true);
     // Handle requests that arrived before this page was first built
     if (DiscoverPage.gameDetailRequest.value != null) {
@@ -84,7 +87,18 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _scrollController.dispose();
     _httpClient.close();
     DiscoverPage.gameDetailRequest.removeListener(_onGameDetailRequest);
+    DiscoverPage.scrollToTopRequest.removeListener(_onScrollToTop);
     super.dispose();
+  }
+
+  void _onScrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _onGameDetailRequest() {

@@ -61,8 +61,10 @@ class GameCollectShell extends StatefulWidget {
 class _GameCollectShellState extends State<GameCollectShell> {
   int _currentIndex = 0;
   late final PageController _pageController = PageController();
+  final _overviewNavKey = GlobalKey<NavigatorState>();
   final _collectionNavKey = GlobalKey<NavigatorState>();
   final _discoverNavKey = GlobalKey<NavigatorState>();
+  final _achievementsNavKey = GlobalKey<NavigatorState>();
   Timer? _achievementDebounce;
 
   @override
@@ -167,8 +169,30 @@ class _GameCollectShellState extends State<GameCollectShell> {
   }
 
   void _switchToTab(int index) {
+    if (index == _currentIndex) {
+      // Already on this tab: pop to root then scroll to top.
+      if (index == 0) _overviewNavKey.currentState?.popUntil((r) => r.isFirst);
+      if (index == 1) _collectionNavKey.currentState?.popUntil((r) => r.isFirst);
+      if (index == 2) _discoverNavKey.currentState?.popUntil((r) => r.isFirst);
+      if (index == 3) _achievementsNavKey.currentState?.popUntil((r) => r.isFirst);
+      _scrollToTopForTab(index);
+      return;
+    }
     setState(() => _currentIndex = index);
     _pageController.jumpToPage(index);
+  }
+
+  void _scrollToTopForTab(int index) {
+    switch (index) {
+      case 0:
+        OverviewPage.scrollToTopRequest.value++;
+      case 1:
+        CollectionPage.scrollToTopRequest.value++;
+      case 2:
+        DiscoverPage.scrollToTopRequest.value++;
+      case 3:
+        AchievementsPage.scrollToTopRequest.value++;
+    }
   }
 
   void _switchToTabAnimated(int index) {
@@ -181,10 +205,13 @@ class _GameCollectShellState extends State<GameCollectShell> {
   }
 
   late final List<NavigationTab> _tabs = [
-    const NavigationTab(
+    NavigationTab(
       label: 'Overzicht',
       icon: LucideIcons.house,
-      page: _TabNavigator(child: OverviewPage()),
+      page: _TabNavigator(
+        navigatorKey: _overviewNavKey,
+        child: const OverviewPage(),
+      ),
     ),
     NavigationTab(
       label: 'Collectie',
@@ -202,10 +229,13 @@ class _GameCollectShellState extends State<GameCollectShell> {
         child: const DiscoverPage(),
       ),
     ),
-    const NavigationTab(
+    NavigationTab(
       label: 'Achievements',
       icon: LucideIcons.trophy,
-      page: _TabNavigator(child: AchievementsPage()),
+      page: _TabNavigator(
+        navigatorKey: _achievementsNavKey,
+        child: const AchievementsPage(),
+      ),
     ),
   ];
 

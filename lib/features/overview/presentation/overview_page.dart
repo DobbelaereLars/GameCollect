@@ -21,12 +21,14 @@ class OverviewPage extends StatefulWidget {
   /// Set a tab index to request that the shell switches to that tab.
   /// 0 = Overzicht, 1 = Collectie, 2 = Ontdekken, 3 = Voortgang, 4 = Achievements
   static final switchToTabRequest = ValueNotifier<int?>(null);
+  static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
   State<OverviewPage> createState() => _OverviewPageState();
 }
 
 class _OverviewPageState extends State<OverviewPage> {
+  final ScrollController _scrollController = ScrollController();
   // ── Collection (offline) ──────────────────────────────────────────────────
   List<CollectionItem> _collectionItems = [];
   bool _isLoadingCollection = true;
@@ -50,6 +52,17 @@ class _OverviewPageState extends State<OverviewPage> {
     _loadCollection();
     _fetchTrending();
     DatabaseHelper.instance.addListener(_loadCollection);
+    OverviewPage.scrollToTopRequest.addListener(_onScrollToTop);
+  }
+
+  void _onScrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   @override
@@ -57,6 +70,8 @@ class _OverviewPageState extends State<OverviewPage> {
     _slowConnectionTimer?.cancel();
     _httpClient.close();
     DatabaseHelper.instance.removeListener(_loadCollection);
+    OverviewPage.scrollToTopRequest.removeListener(_onScrollToTop);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -267,6 +282,7 @@ class _OverviewPageState extends State<OverviewPage> {
       body: SafeArea(
         bottom: false,
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // ── Greeting ──────────────────────────────────────────────────
             SliverToBoxAdapter(
