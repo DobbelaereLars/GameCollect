@@ -159,9 +159,11 @@ class _CollectionPageState extends State<CollectionPage> {
           }
           if (specificFormat == 'Allebei') specificFormat = 'Fysiek & Digitaal';
           final pMatchesFormat =
-              _selectedFormats.isEmpty || _selectedFormats.contains(specificFormat);
+              _selectedFormats.isEmpty ||
+              _selectedFormats.contains(specificFormat);
           final pMatchesPlatform =
-              _selectedPlatforms.isEmpty || _selectedPlatforms.contains(cleanPlatform);
+              _selectedPlatforms.isEmpty ||
+              _selectedPlatforms.contains(cleanPlatform);
           if (pMatchesFormat && pMatchesPlatform) {
             matchesAnyPlatform = true;
             break;
@@ -913,6 +915,9 @@ class _GridCoverCardState extends State<_GridCoverCard> {
     final platformName = current.selectedPlatforms.isNotEmpty
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
+    final bool isCompleted = widget.group.every(
+      (e) => e.isManuallyCompleted || e.progressRatio >= 1.0,
+    );
 
     return ScaleTap(
       onTap: () => widget.onTap(current),
@@ -1000,6 +1005,25 @@ class _GridCoverCardState extends State<_GridCoverCard> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+
+              // Trophy badge — top-right bij 100% voltooiing
+              if (isCompleted)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.orange500,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      LucideIcons.trophy,
+                      size: 11,
+                      color: AppTheme.trueWhite,
+                    ),
                   ),
                 ),
 
@@ -1275,9 +1299,21 @@ class _CollectionListCard extends StatelessWidget {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
                                 height: 1.4,
-                                color: AppTheme.gray500,
+                                color: (item.isManuallyCompleted ||
+                                        item.progressRatio >= 1.0)
+                                    ? AppTheme.orange500
+                                    : AppTheme.gray500,
                               ),
                             ),
+                            if (item.isManuallyCompleted ||
+                                item.progressRatio >= 1.0) ...[                              
+                              const SizedBox(width: 4),
+                              const Icon(
+                                LucideIcons.trophy,
+                                size: 13,
+                                color: AppTheme.orange500,
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 8),

@@ -24,17 +24,13 @@ class GameCollectApp extends StatelessWidget {
           value: AppThemeController.instance,
         ),
         // Authenticatiestatus (Firebase Auth via singleton).
-        ChangeNotifierProvider<AuthService>.value(
-          value: AuthService.instance,
-        ),
+        ChangeNotifierProvider<AuthService>.value(value: AuthService.instance),
         // Netwerkreachability (connectivity_plus via singleton).
         ChangeNotifierProvider<ConnectivityService>.value(
           value: ConnectivityService.instance,
         ),
         // Cloud-synchronisatiestatus (Firestore via singleton).
-        ChangeNotifierProvider<SyncService>.value(
-          value: SyncService.instance,
-        ),
+        ChangeNotifierProvider<SyncService>.value(value: SyncService.instance),
         // Collectielijst — de enige source-of-truth voor CollectionItems.
         ChangeNotifierProvider<CollectionNotifier>(
           create: (_) => CollectionNotifier(),

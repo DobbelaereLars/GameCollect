@@ -345,13 +345,16 @@ class _OverviewPageState extends State<OverviewPage> {
                             const SizedBox(width: 8),
                             _StatChip(
                               icon: LucideIcons.clock,
-                              label: _formatMinutes(_totalPlaytimeMinutes(collectionItems)),
+                              label: _formatMinutes(
+                                _totalPlaytimeMinutes(collectionItems),
+                              ),
                             ),
                             if (_completedCount(collectionItems) > 0) ...[
                               const SizedBox(width: 8),
                               _StatChip(
                                 icon: LucideIcons.trophy,
-                                label: '${_completedCount(collectionItems)} voltooid',
+                                label:
+                                    '${_completedCount(collectionItems)} voltooid',
                               ),
                             ],
                           ],
@@ -392,7 +395,8 @@ class _OverviewPageState extends State<OverviewPage> {
             ),
 
             // ── Bezig met spelen (conditioneel) ───────────────────────────
-            if (!isLoadingCollection && _inProgressGroups(collectionItems).isNotEmpty)
+            if (!isLoadingCollection &&
+                _inProgressGroups(collectionItems).isNotEmpty)
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -868,6 +872,9 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     final platformName = current.selectedPlatforms.isNotEmpty
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
+    final bool isCompleted = widget.group.allItems.every(
+      (e) => e.isManuallyCompleted || e.progressRatio >= 1.0,
+    );
 
     return GestureDetector(
       onTap: () => widget.onTap(current),
@@ -946,6 +953,25 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                         ],
                       ),
                     ),
+
+                    // Trophy badge — top-right bij 100% voltooiing
+                    if (isCompleted)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange500,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            LucideIcons.trophy,
+                            size: 11,
+                            color: AppTheme.trueWhite,
+                          ),
+                        ),
+                      ),
 
                     // Bottom gradient + title + optional playtime
                     Positioned(
