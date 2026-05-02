@@ -6,17 +6,23 @@ import 'package:timezone/timezone.dart' as tz;
 import '../database/database_helper.dart';
 import '../../features/collection/domain/collection_item.dart';
 
+/// Service voor lokale pushmeldingen: dagelijkse herinneringen en toestemming.
 class NotificationService {
   NotificationService._();
+
+  /// Singleton-instantie, globaal toegankelijk.
   static final NotificationService instance = NotificationService._();
 
+  // Onderliggende notificatieplugin.
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  // Vaste ID voor de dagelijkse herinnering.
   static const int _dailyReminderId = 1;
 
-  // ── Initialisation ──────────────────────────────────────────────────────────
+  // ── Initialisatie ──────────────────────────────────────────────────────────
 
+  /// Initialiseert de notificatieplugin voor iOS en Android.
   Future<void> initialize() async {
     tz.initializeTimeZones();
 
@@ -37,9 +43,9 @@ class NotificationService {
     await _plugin.initialize(initSettings);
   }
 
-  // ── Permissions ─────────────────────────────────────────────────────────────
+  // ── Machtigingen ─────────────────────────────────────────────────────────────
 
-  /// Returns whether the user has granted notification permission at system level.
+  /// Geeft terug of de gebruiker systeemnotificaties heeft toegestaan.
   Future<bool> arePermissionsGranted() async {
     final ios = _plugin
         .resolvePlatformSpecificImplementation<
@@ -61,6 +67,7 @@ class NotificationService {
     return false;
   }
 
+  /// Vraagt de gebruiker om toestemming voor meldingen (iOS en Android 13+).
   Future<bool> requestPermissions() async {
     final ios = _plugin
         .resolvePlatformSpecificImplementation<
@@ -87,15 +94,15 @@ class NotificationService {
     return false;
   }
 
-  // ── Daily reminder ──────────────────────────────────────────────────────────
+  // ── Dagelijkse herinnering ──────────────────────────────────────────────────
 
-  /// Schedules a daily notification at 19:00 with a random game from the
-  /// provided list. Replaces any existing daily reminder.
+  /// Plant een dagelijkse notificatie om 19:00 met een willekeurige game
+  /// uit de opgegeven lijst. Vervangt een eventueel bestaande herinnering.
   Future<void> scheduleDailyReminder(List<CollectionItem> items) async {
     final enabled = await DatabaseHelper.instance.getNotificationsEnabled();
     if (!enabled) return;
 
-    // Pick a game that is in progress, not completed, and played in the last 5 days.
+    // Kies een game die bezig is, niet voltooid en de laatste 5 dagen gespeeld.
     final cutoff = DateTime.now().subtract(const Duration(days: 5));
     final candidates = items.where((i) {
       if (i.isManuallyCompleted || i.progressRatio >= 1.0) return false;
@@ -156,15 +163,15 @@ class NotificationService {
     await _plugin.cancel(_dailyReminderId);
   }
 
-  // ── Cancel all ──────────────────────────────────────────────────────────────
+  // ── Alles annuleren ──────────────────────────────────────────────────────────
 
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
     if (kDebugMode)
-      debugPrint('[NotificationService] All notifications cancelled.');
+      debugPrint('[NotificationService] Alle notificaties geannuleerd.');
   }
 
-  // ── Schedule all (re-enable) ─────────────────────────────────────────────────
+  // ── Alles inplannen (opnieuw inschakelen) ───────────────────────────────────
 
   Future<void> scheduleAll() async {
     final items = await DatabaseHelper.instance.getCollectionItems();

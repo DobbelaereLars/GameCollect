@@ -22,6 +22,8 @@ import 'notes_page.dart';
 import 'playtime_page.dart';
 import 'widgets/add_platform_sheet.dart';
 
+/// Detailpagina van een collectie-item: toont en beheert alle eigenschappen
+/// (platforms, tags, achievements, speelduur, notities en voortgang).
 class CollectionItemDetailPage extends StatefulWidget {
   const CollectionItemDetailPage({
     super.key,
@@ -29,7 +31,10 @@ class CollectionItemDetailPage extends StatefulWidget {
     this.openTagsOnStart = false,
   });
 
+  /// Database-ID van het te tonen collectie-item.
   final int itemId;
+
+  /// Als true, wordt de tagbeheer-sectie meteen geopend bij het laden.
   final bool openTagsOnStart;
 
   @override
@@ -46,14 +51,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   bool _isLoading = true;
   bool _hasOpenedTagsOnStart = false;
   List<GameAchievementWithState> _achievements = [];
-  // Stable display order — only re-sorted after the delay timer fires
+  // Stabiele weergavevolgorde — alleen opnieuw gesorteerd nadat de vertraging-timer valt.
   List<GameAchievementWithState> _displayAchievements = [];
 
-  // Achievement pagination & delayed sort
+  // Paginering van achievements en vertraagde hersortering.
   int _achievementPage = 0;
   Timer? _sortTimer;
 
-  // Requirements
+  // Vereisten (requirements)
   List<CustomRequirement> _requirements = [];
   List<CustomRequirement> _displayRequirements = [];
   int _requirementPage = 0;
@@ -98,6 +103,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     super.dispose();
   }
 
+  /// Laadt het collectie-item en bijbehorende achievements uit de database.
+  /// Haalt achievement-definities automatisch op via RAWG als ze ontbreken.
   Future<void> _loadItem() async {
     setState(() {
       _isLoading = true;
@@ -118,9 +125,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       item.achievementStates,
     );
 
-    // Auto-fetch from RAWG when the game has achievement states (synced from
-    // Firebase) but the local game_achievements table has no definitions yet.
-    // This happens when a collection item is restored on a new device.
+    // Auto-fetch via RAWG als het item achievement-statussen heeft (gesynchroniseerd via
+    // Firebase) maar de lokale game_achievements-tabel nog geen definities bevat.
+    // Dit treedt op als een collectie-item op een nieuw toestel hersteld wordt.
     if (achievements.isEmpty && item.achievementStates.isNotEmpty) {
       final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
       if (apiKey.isNotEmpty) {
@@ -150,8 +157,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       }
     }
 
-    // If achievements exist in game_achievements but states aren't tracked yet
-    // (e.g. game was added before this feature), initialise them.
+    // Als achievements bestaan in game_achievements maar er nog geen statussen zijn
+    // (bijv. de game is toegevoegd vóór deze feature), initialiseer ze dan.
     if (achievements.isNotEmpty && item.achievementStates.isEmpty) {
       final newStates = achievements
           .map(
@@ -190,6 +197,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     }
   }
 
+  /// Slaat een gewijzigd collectie-item op in de database en werkt de UI bij.
   Future<void> _persistItem(CollectionItem updated) async {
     await DatabaseHelper.instance.updateCollectionItem(updated);
     if (!mounted) {
@@ -200,6 +208,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Toont de tag-onboarding bottomsheet voor het eerste gebruik.
   Future<void> _showTagsOnboardingSheet() async {
     final item = _item;
     if (item == null) {
@@ -598,8 +607,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  // Reschedule the delayed sort — resets the timer on every toggle so rapid
-  // tapping doesn't cause premature reordering.
+  // Herstart de vertraagde sortering — reset de timer bij snel achter elkaar schakelen
+  // om voorbarig herordenen te voorkomen.
   void _scheduleSortDelay() {
     _sortTimer?.cancel();
     _sortTimer = Timer(const Duration(seconds: 2), () {
@@ -629,6 +638,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     ];
   }
 
+  /// Herstart de vertraagde sortering voor vereisten.
   void _scheduleRequirementSortDelay() {
     _requirementSortTimer?.cancel();
     _requirementSortTimer = Timer(const Duration(seconds: 2), () {
@@ -640,6 +650,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Markeert een vereiste als voltooid of niet-voltooid en slaat op.
   Future<void> _toggleRequirementCompleted(String id, bool value) async {
     final item = _item;
     if (item == null) return;
@@ -659,6 +670,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     _scheduleRequirementSortDelay();
   }
 
+  /// Schakelt een vereiste in of uit (telt mee of niet in de voortgang).
   Future<void> _toggleRequirementEnabled(String id, bool enabled) async {
     final item = _item;
     if (item == null) return;
@@ -675,6 +687,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Verwijdert een vereiste permanent uit het collectie-item.
   Future<void> _deleteRequirement(String id) async {
     final item = _item;
     if (item == null) return;
@@ -691,6 +704,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Markeert een RAWG-achievement als voltooid of niet-voltooid.
   Future<void> _toggleAchievementCompleted(int rawgId, bool value) async {
     final item = _item;
     if (item == null) return;
@@ -713,12 +727,12 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
 
     await _persistItem(item.copyWith(achievementStates: updatedStates));
     if (!mounted) return;
-    // Update the completion state immediately — sorting happens after the delay
+    // Werk de voltooiingsstatus onmiddellijk bij — sortering volgt na de vertraging.
     setState(() {
       _achievements = _achievements
           .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
           .toList(growable: false);
-      // Mirror the change in displayAchievements without resorting yet
+      // Pas de wijziging toe in displayAchievements zonder opnieuw te sorteren.
       _displayAchievements = _displayAchievements
           .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
           .toList(growable: false);
@@ -726,6 +740,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     _scheduleSortDelay();
   }
 
+  /// Schakelt een RAWG-achievement in of uit (telt mee of niet in de voortgang).
   Future<void> _toggleAchievementEnabled(int rawgId, bool enabled) async {
     final item = _item;
     if (item == null) return;
@@ -756,6 +771,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Toont een detaildialoog voor een RAWG-achievement.
   void _showAchievementModal(GameAchievementWithState achievement) {
     showDialog<void>(
       context: context,
@@ -874,6 +890,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een detaildialoog voor een eigen vereiste.
   void _showRequirementModal(CustomRequirement requirement) {
     showDialog<void>(
       context: context,
@@ -937,6 +954,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een bevestigingssheet vóór het verwijderen van een vereiste.
   Future<void> _showDeleteRequirementConfirmSheet(String id) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1013,6 +1031,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een bottomsheet om een nieuwe eigen vereiste toe te voegen.
   Future<void> _showAddRequirementSheet() async {
     final item = _item;
     if (item == null) return;
@@ -1053,6 +1072,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Formatteert een aantal minuten als leesbare tijdnotatie (bijv. "2u 15m").
   String _formatMinutes(int totalMinutes) {
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
@@ -1062,6 +1082,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return '${hours}u ${minutes}m';
   }
 
+  /// Deelt de voortgang van het spel als tekstbericht via het systeemdeel-menu.
   Future<void> _shareGameProgress(CollectionItem item) async {
     final progress = item.isManuallyCompleted
         ? '100%'
@@ -1271,6 +1292,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Bouwt de heroheader met omslagafbeelding, titel, platform en voortgangsbalk.
   Widget _buildHeader(CollectionItem item) {
     final tagActionLabel = item.activeTags.isEmpty
         ? 'Tags toevoegen'
@@ -1423,6 +1445,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Bouwt een icoon+tekst-rij voor de header-metagegevens.
   Widget _buildHeaderMetaRow({
     required IconData icon,
     required String text,
@@ -1451,6 +1474,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Extraheert de platformnaam zonder formaatnotatie (bijv. "PlayStation 5" uit "PlayStation 5 (Fysiek)").
   String _extractPlatformName(String platformWithFormat) {
     if (platformWithFormat.isEmpty) {
       return 'Onbekend platform';
@@ -1461,6 +1485,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return match?.group(1)?.trim() ?? platformWithFormat;
   }
 
+  /// Opent de instellingenpagina voor dit collectie-item.
   Future<void> _openSettingsPage(CollectionItem item) async {
     final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
         ? item.selectedPlatforms.first
@@ -1491,6 +1516,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     }
   }
 
+  /// Extraheert de formaatnotatie uit een platform+formaat-string (bijv. "Fysiek").
   String _extractFormatName(String platformWithFormat, {String? fallback}) {
     final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
     final value = match?.group(1)?.trim();
@@ -1502,6 +1528,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         : fallback;
   }
 
+  /// Geeft het bijpassende icoon terug op basis van de formaatnaam.
   IconData _formatIconFor(String formatName) {
     if (formatName == 'Fysiek') {
       return LucideIcons.disc;
@@ -1512,6 +1539,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return LucideIcons.layers;
   }
 
+  /// Bouwt een badge-widget (icoon + tekst) voor de omslagafbeelding.
   Widget _buildCoverBadge({required IconData icon, required String text}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1539,6 +1567,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Bouwt een placeholder-widget als er geen omslagafbeelding beschikbaar is.
   Widget _buildCoverPlaceholder() {
     return Container(
       color: AppTheme.orange50,
@@ -1548,6 +1577,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Bouwt een tegel die de totale speelduur toont en naar de speelduurpagina navigeert.
   Widget _buildPlaytimeSummaryTile(CollectionItem item) {
     return GestureDetector(
       onTap: () async {
@@ -1629,7 +1659,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   Widget _buildDiscoverTile(CollectionItem item) {
     return GestureDetector(
       onTap: () {
-        // Cycle through null so the same game can be requested multiple times
+        // Zet eerst null zodat dezelfde game meerdere keren aangevraagd kan worden.
         DiscoverPage.gameDetailRequest.value = null;
         DiscoverPage.gameDetailRequest.value = (
           gameId: item.apiId,
@@ -1693,7 +1723,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   }
 
   Widget _buildAchievementsSection() {
-    // No achievements -> hide entire section
+    // Geen achievements aanwezig — verberg het volledige gedeelte.
     if (_achievements.isEmpty) return const SizedBox.shrink();
 
     final enabled = _displayAchievements.where((a) => a.isEnabled).toList();
@@ -1710,7 +1740,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header row
+        // Koptekstrij met titel, score en zichtbaarheidsindicator.
         Row(
           children: [
             Expanded(
@@ -1737,7 +1767,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               ),
             ),
             const SizedBox(width: 16),
-            // Eye icon -- zelfde grootte als score, oranje
+            // Oogpictogram — zelfde grootte als de score, oranje.
             GestureDetector(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -1774,10 +1804,10 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         ),
         const SizedBox(height: 4),
 
-        // Paginated enabled achievements
+        // Actieve achievements op de huidige pagina.
         ...pageItems.map((a) => _buildAchievementTile(a)),
 
-        // Pagination controls -- fixed-width counter prevents button drift
+        // Pagineringsbesturing — vaste breedte van de teller voorkomt verschuiving van knoppen.
         if (totalPages > 1) ...[
           const SizedBox(height: 12),
           Row(
@@ -3348,5 +3378,5 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 }
 
-// ── Add Platform Sheet ────────────────────────────────────────────────────────
-// Delegated to widgets/add_platform_sheet.dart (AddPlatformSheet)
+// ── Platform toevoegen ────────────────────────────────────────────────────────
+// Gedelegeerd naar widgets/add_platform_sheet.dart (AddPlatformSheet)

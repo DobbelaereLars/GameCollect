@@ -15,12 +15,14 @@ import '../../discover/domain/rawg_game.dart';
 import '../../discover/presentation/discover_page.dart';
 import 'profile_page.dart';
 
+/// Overzichtspagina: toont collectionstatistieken en trending games via RAWG.
 class OverviewPage extends StatefulWidget {
   const OverviewPage({super.key});
 
-  /// Set a tab index to request that the shell switches to that tab.
-  /// 0 = Overzicht, 1 = Collectie, 2 = Ontdekken, 3 = Voortgang, 4 = Achievements
+  /// Verzoek om naar een andere tab te schakelen (0–4). Ingesteld door andere pagina's.
   static final switchToTabRequest = ValueNotifier<int?>(null);
+
+  /// Verzoek om naar boven te scrollen, geactiveerd door de tab-navigatie.
   static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
@@ -42,9 +44,10 @@ class _OverviewPageState extends State<OverviewPage> {
   String? _trendingError;
   Timer? _slowConnectionTimer;
 
+  /// RAWG API-sleutel uit het .env-bestand.
   String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // ── Levenscyclus ──────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -55,6 +58,7 @@ class _OverviewPageState extends State<OverviewPage> {
     OverviewPage.scrollToTopRequest.addListener(_onScrollToTop);
   }
 
+  /// Scrollt de pagina naar boven na een tab-tik op het overzicht-icoon.
   void _onScrollToTop() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -75,8 +79,9 @@ class _OverviewPageState extends State<OverviewPage> {
     super.dispose();
   }
 
-  // ── Data fetching ─────────────────────────────────────────────────────────
+  // ── Gegevens ophalen ─────────────────────────────────────────────────────
 
+  /// Laadt de collectie-items uit de lokale database.
   Future<void> _loadCollection() async {
     if (!mounted) return;
     final items = await DatabaseHelper.instance.getCollectionItems();
@@ -87,6 +92,7 @@ class _OverviewPageState extends State<OverviewPage> {
     });
   }
 
+  /// Haalt trending games op via de RAWG API met trage-verbinding-indicator.
   Future<void> _fetchTrending() async {
     if (_rawgApiKey.isEmpty) {
       setState(() {
@@ -153,21 +159,24 @@ class _OverviewPageState extends State<OverviewPage> {
         .toList(growable: false);
   }
 
+  /// Totaal aantal unieke spellen in de collectie (per apiId).
   int get _totalUniqueGames =>
       _collectionItems.map((e) => e.apiId).toSet().length;
 
+  /// Totale speeltijd in minuten over alle collectie-items.
   int get _totalPlaytimeMinutes =>
       _collectionItems.fold(0, (sum, item) => sum + item.totalPlaytimeMinutes);
 
+  /// Aantal unieke voltooide spellen (manueel of via voortgangsratio).
   int get _completedCount => _collectionItems
       .where((item) => item.isManuallyCompleted || item.progressRatio >= 1.0)
       .map((e) => e.apiId)
       .toSet()
       .length;
 
-  /// Unique games from collection (first occurrence per apiId), max 10.
-  /// Each entry carries allItems (all platform entries for same apiId) so
-  /// the card can show platform badges.
+  /// Unieke games uit de collectie (eerste voorkomen per apiId), max 10.
+  /// Elke groep bevat allItems (alle platform-entries voor dezelfde apiId)
+  /// zodat de kaart platformbadges kan tonen.
   List<_GameGroup> get _recentGroups {
     final seen = <int>{};
     final result = <_GameGroup>[];
@@ -183,8 +192,8 @@ class _OverviewPageState extends State<OverviewPage> {
     return result.take(10).toList();
   }
 
-  /// Games with ANY platform that has playtime > 0, not yet completed,
-  /// AND a playtime entry added within the last 5 days. Sorted by total playtime desc.
+  /// Games waarbij minstens één platform speelduur heeft, nog niet voltooid is
+  /// en een speelduurinvoer heeft van de afgelopen 5 dagen. Gesorteerd op totale speelduur (aflopend).
   List<_GameGroup> get _inProgressGroups {
     final seen = <int>{};
     final candidates = <_GameGroup>[];
@@ -239,8 +248,9 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Hulpfuncties ──────────────────────────────────────────────────────────
 
+  /// Formatteert minuten naar leesbare tijdnotatie (bijv. "2u 15m").
   String _formatMinutes(int minutes) {
     if (minutes == 0) return '0 min';
     final h = minutes ~/ 60;
@@ -250,6 +260,7 @@ class _OverviewPageState extends State<OverviewPage> {
     return '${h}u ${m}m';
   }
 
+  /// Geeft een tijdsgebonden begroetingstekst terug op basis van het huidige uur.
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 6) return 'Goedenacht';
@@ -258,11 +269,13 @@ class _OverviewPageState extends State<OverviewPage> {
     return 'Goedenavond';
   }
 
+  /// Navigeert naar de detailpagina van een collectie-item via de collectiepagina.
   void _navigateToDetail(CollectionItem item) {
     if (item.id == null) return;
     CollectionPage.itemDetailRequest.value = item.id;
   }
 
+  /// Navigeert naar de RAWG-gamepagina via de ontdekkingspagina.
   void _navigateToGame(RawgGame game) {
     DiscoverPage.gameDetailRequest.value = (
       gameId: game.id,
@@ -688,15 +701,15 @@ class _SectionErrorCard extends StatelessWidget {
 class _GameGroup {
   const _GameGroup({required this.representative, required this.allItems});
 
-  /// The first/primary CollectionItem (used for cover, title, apiId).
+  /// Het eerste/primaire CollectionItem (gebruikt voor cover, titel en apiId).
   final CollectionItem representative;
 
-  /// All platform entries for this game (may be 1 or more).
+  /// Alle platform-entries voor dit spel (één of meer).
   final List<CollectionItem> allItems;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Horizontal game list (collection groups)
+// Horizontale gamelijst (collectiegroepen)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HorizontalGroupList extends StatelessWidget {
@@ -798,13 +811,13 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
 
   List<CollectionItem> get _eligibleItems {
     if (widget.showProgress) {
-      // For "bezig met spelen": only platforms with playtime
+      // Voor "bezig met spelen": alleen platforms met speelduur.
       final withPlaytime = widget.group.allItems
           .where((e) => e.totalPlaytimeMinutes > 0)
           .toList(growable: false);
       return withPlaytime.isNotEmpty ? withPlaytime : widget.group.allItems;
     }
-    // For "mijn collectie": all platforms
+    // Voor "mijn collectie": alle platforms.
     return widget.group.allItems;
   }
 
@@ -884,11 +897,11 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 320),
                         transitionBuilder: (child, animation) {
-                          // AnimatedSwitcher reverses the animation for the
-                          // outgoing child (1→0), so both begin/end use
-                          // Offset.zero as the "resting" position:
-                          // • incoming: begin=(±1,0) → end=(0,0)  [0→1]
-                          // • outgoing: end=(0,0) stays; begin=(∓1,0)  [1→0 → drifts off]
+                          // AnimatedSwitcher keert de animatie om voor het
+                          // uitgaande kind (1→0), dus beide begin/end gebruiken
+                          // Offset.zero als de "rustpositie":
+                          // • inkomend: begin=(±1,0) → end=(0,0)  [0→1]
+                          // • uitgaand: end=(0,0) blijft; begin=(∓1,0)  [1→0 → schuift weg]
                           final dir = _forward ? 1.0 : -1.0;
                           final isIncoming =
                               child.key == ValueKey(_selectedIndex);
@@ -983,8 +996,8 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
               ),
             ),
 
-            // Dot indicators – 16 px slot always reserved to keep all card
-            // heights uniform; filled only when there are multiple platforms.
+            // Stippelweergave — altijd een 16 px ruimte gereserveerd zodat
+            // kaarthoogtes uniform blijven; alleen gevuld bij meerdere platforms.
             SizedBox(
               height: 16,
               child: hasMultiple

@@ -4,9 +4,12 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/app_theme_controller.dart';
 import 'features/navigation/presentation/game_collect_shell.dart';
 
+/// Root-widget van de GameCollect-app.
+/// Luistert op [AppThemeController] en past het thema dynamisch aan.
 class GameCollectApp extends StatelessWidget {
   const GameCollectApp({super.key});
 
+  /// Bouwt de [MaterialApp] met licht/donker thema op basis van de gebruikersvoorkeur.
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -18,9 +21,9 @@ class GameCollectApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: AppThemeController.instance.mode,
-          // Force a full subtree rebuild on brightness change so widgets that
-          // read `AppTheme.<dynamic>` getters directly (i.e. don't depend on
-          // an InheritedWidget) also pick up the new colors immediately.
+          // Forceer een volledige herbouw bij helderheidswijziging zodat widgets
+          // die AppTheme-getters direct aanroepen (zonder InheritedWidget)
+          // ook direct de juiste kleuren ophalen.
           home: GameCollectShell(key: ValueKey(brightness)),
         );
       },

@@ -4,6 +4,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 
+/// Beheerpagina voor uitgeschakelde eigen vereisten van een collectie-item.
+/// Toont alle vereisten met opties om ze te voltooien, in te schakelen of te verwijderen.
 class DisabledRequirementsPage extends StatefulWidget {
   const DisabledRequirementsPage({
     super.key,
@@ -13,9 +15,16 @@ class DisabledRequirementsPage extends StatefulWidget {
     required this.onDelete,
   });
 
+  /// Initiële lijst van vereisten met hun huidige status.
   final List<CustomRequirement> initialRequirements;
+
+  /// Callback om een vereiste als voltooid/niet-voltooid te markeren.
   final Future<void> Function(String id, bool value) onToggleCompleted;
+
+  /// Callback om een vereiste in of uit te schakelen (niet meer meetellen).
   final Future<void> Function(String id, bool enabled) onToggleEnabled;
+
+  /// Callback om een vereiste permanent te verwijderen.
   final Future<void> Function(String id) onDelete;
 
   @override
@@ -32,6 +41,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
     _requirements = List<CustomRequirement>.from(widget.initialRequirements);
   }
 
+  /// Toont een bevestigingsbottomsheet vóór het verwijderen van een vereiste.
   Future<void> _confirmDelete(String id) async {
     await showModalBottomSheet<void>(
       context: context,

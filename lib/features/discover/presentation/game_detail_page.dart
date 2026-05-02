@@ -13,9 +13,16 @@ import '../../collection/presentation/widgets/add_to_collection_sheet.dart';
 import '../data/rawg_games_api.dart';
 import '../domain/rawg_game.dart';
 
+/// Detailpagina voor een spel: toont omschrijving, screenshots, platforms en achievements.
+/// Haalt gegevens op via de RAWG API en biedt een knop om toe te voegen aan de collectie.
 class GameDetailPage extends StatefulWidget {
+  /// RAWG-ID van het te tonen spel.
   final int gameId;
+
+  /// Fallback-titel die getoond wordt vóór de API-response binnenkomt.
   final String fallbackTitle;
+
+  /// Fallback-omslagafbeelding vóór de API-response binnenkomt, of null.
   final String? fallbackCoverUrl;
 
   const GameDetailPage({
@@ -40,8 +47,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
   bool _isSlowConnection = false;
   bool _isAlreadyInCollection = false;
 
+  /// RAWG API-sleutel uit het .env-bestand.
   String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
 
+  /// Initialiseert de pagina: haalt gamedetails op en controleert of het spel al in de collectie zit.
   @override
   void initState() {
     super.initState();
@@ -50,6 +59,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
     DatabaseHelper.instance.addListener(_checkIfInCollection);
   }
 
+  /// Controleert of het spel al in de collectie staat en werkt de knopstatus bij.
   Future<void> _checkIfInCollection() async {
     final inCollection = await DatabaseHelper.instance.isGameInCollection(
       widget.gameId,
@@ -69,6 +79,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
     super.dispose();
   }
 
+  /// Haalt de volledige gamedetails op via de RAWG API.
   Future<void> _fetchGameDetails() async {
     setState(() {
       _isLoading = true;
@@ -288,7 +299,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   ),
                   const SizedBox(height: 24),
                 ],
-                // Add to Collection / View in Collection Button
+                // Knop om het spel toe te voegen aan of te bekijken in de collectie.
                 Builder(
                   builder: (context) {
                     final released = game.released;

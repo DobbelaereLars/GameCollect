@@ -11,15 +11,18 @@ import 'widgets/add_platform_sheet.dart';
 import '../../discover/presentation/widgets/discover_search_bar.dart';
 import '../../../core/preferences/view_preferences.dart';
 
+/// Overzichtspagina van de gebruikerscollectie met zoekbalk, filters en raster/lijstweergave.
 class CollectionPage extends StatefulWidget {
   const CollectionPage({super.key});
 
-  /// Set this to a game title to pre-fill the search bar and clear filters.
-  /// The shell observes this to switch to the collection tab automatically.
+  /// Stel in op een gametitel om de zoekbalk vooraf in te vullen.
+  /// De shell luistert hierop om automatisch naar de collectietab te schakelen.
   static final searchRequest = ValueNotifier<String?>(null);
 
+  /// Stel in op een item-ID om direct naar de detailpagina van dat item te navigeren.
   static final itemDetailRequest = ValueNotifier<int?>(null);
 
+  /// Signaal om de lijst terug naar boven te scrollen.
   static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
@@ -84,6 +87,7 @@ class _CollectionPageState extends State<CollectionPage> {
     super.dispose();
   }
 
+  /// Scrollt de lijst naar boven na een tab-tik op het collectie-icoon.
   void _onScrollToTop() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -94,11 +98,12 @@ class _CollectionPageState extends State<CollectionPage> {
     }
   }
 
+  /// Verwerkt een extern zoekverzoek: navigeert naar boven en vult de zoekbalk in.
   void _onSearchRequest() {
     final query = CollectionPage.searchRequest.value;
     if (query == null) return;
     CollectionPage.searchRequest.value = null;
-    // Pop any detail/settings/notes pages open on this tab's navigator
+    // Pop alle open detail-/instellingen-/notities-pagina's op dit tabblad.
     Navigator.of(context).popUntil((route) => route.isFirst);
     _selectedFormats = {};
     _selectedPlatforms = {};
@@ -108,6 +113,7 @@ class _CollectionPageState extends State<CollectionPage> {
     _applyFilters();
   }
 
+  /// Verwerkt een extern itemdetailverzoek: opent de detailpagina na het sluiten van andere routes.
   void _onItemDetailRequest() {
     final itemId = CollectionPage.itemDetailRequest.value;
     if (itemId == null || !mounted) return;
@@ -123,6 +129,7 @@ class _CollectionPageState extends State<CollectionPage> {
     });
   }
 
+  /// Laadt de weergavevoorkeur (raster of lijst) uit SharedPreferences.
   Future<void> _loadViewPreference() async {
     final value = await ViewPreferences.getCollectionIsGridView();
     if (!mounted) return;
@@ -131,6 +138,7 @@ class _CollectionPageState extends State<CollectionPage> {
     }
   }
 
+  /// Laadt alle collectie-items uit de lokale database.
   Future<void> _loadCollection() async {
     setState(() {
       _isLoading = true;
@@ -145,15 +153,16 @@ class _CollectionPageState extends State<CollectionPage> {
     });
   }
 
+  /// Past de zoekopdracht en actieve filters toe op de volledige itemlijst.
   void _applyFilters() {
     final query = _searchController.text.toLowerCase();
 
     setState(() {
       _filteredItems = _allItems.where((item) {
-        // Text search
+        // Tekst zoeken
         final matchesQuery = item.title.toLowerCase().contains(query);
 
-        // Check if at least one platform matches both filters
+        // Controleer of minstens één platform aan beide filters voldoet.
         bool matchesAnyPlatform = false;
 
         if (_selectedFormats.isEmpty && _selectedPlatforms.isEmpty) {
@@ -194,7 +203,7 @@ class _CollectionPageState extends State<CollectionPage> {
   }
 
   void _showFilterBottomSheet() {
-    // Initialize temp filters with current values
+    // Initialiseer de tijdelijke filters met de huidige actieve waarden.
     _tempFormats = Set.from(_selectedFormats);
     _tempPlatforms = Set.from(_selectedPlatforms);
 
@@ -699,6 +708,7 @@ class _CollectionPageState extends State<CollectionPage> {
     );
   }
 
+  /// Bouwt een collectiekaart met omslagafbeelding, metagegevens en voortgangsbalk.
   Widget _buildCollectionCard({
     required BuildContext context,
     required CollectionItem item,
@@ -880,6 +890,7 @@ class _CollectionPageState extends State<CollectionPage> {
     );
   }
 
+  /// Bouwt een placeholder als er geen omslagafbeelding beschikbaar is.
   Widget _buildPlaceholder() {
     return Container(
       color: AppTheme.orange50,

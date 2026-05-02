@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_theme_controller.dart';
 import 'auth_page.dart';
 
+/// Profielpagina: toont accountinfo, synchronisatiestatus, meldingen en app-instellingen.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -44,19 +45,21 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  /// Reageert op wijzigingen in auth-, sync- of verbindingsstatus.
   void _onSyncOrAuthChange() {
     if (!mounted) return;
-    // The notifications preference may have just been changed by sync.
+    // De meldingsvoorkeur kan zojuist gewijzigd zijn door sync.
     _syncNotificationState();
     setState(() {});
   }
 
+  /// Synchroniseert de meldingsstatus tussen systeemrechten en de database.
   Future<void> _syncNotificationState() async {
     final systemGranted = await NotificationService.instance
         .arePermissionsGranted();
     final dbEnabled = await DatabaseHelper.instance.getNotificationsEnabled();
 
-    // If system permission is revoked, correct the DB so it stays in sync.
+    // Als systeemtoestemming ingetrokken is, corrigeer de DB zodat deze gesynchroniseerd blijft.
     if (!systemGranted && dbEnabled) {
       await DatabaseHelper.instance.setNotificationsEnabled(false);
     }
@@ -68,14 +71,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ── Reset ─────────────────────────────────────────────────────────────────
 
+  /// Wist alle lokale data en logt de gebruiker uit na bevestiging.
   Future<void> _resetApp(BuildContext context) async {
-    // Sign out first so the device no longer has a session token. Cloud data
-    // remains untouched — the user can sign back in later to restore it.
+    // Eerst uitloggen zodat het toestel geen sessietoken meer heeft.
+    // Clouddata blijft intact — de gebruiker kan later opnieuw inloggen.
     if (AuthService.instance.isSignedIn) {
       try {
         await AuthService.instance.signOut();
       } catch (_) {
-        // Best-effort; ignore errors so reset always completes.
+        // Best-effort; fouten negeren zodat de reset altijd voltooit.
       }
     }
 
@@ -92,13 +96,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (!context.mounted) return;
 
-    // Force app restart by pushing a full-screen blocker
+    // Forceer herstart van de app door een blokkerend volledig scherm te tonen.
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const _RestartPromptScreen()),
       (_) => false,
     );
   }
 
+  /// Toont een bevestigingssheet vóór het volledig resetten van de app.
   Future<void> _showResetConfirmSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -278,6 +283,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Bouwt een sectielabel-widget voor visuele groepering van instellingen.
   Widget _buildSectionLabel(String label) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
@@ -378,8 +384,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ).copyWith(
-                  // Hide the border when the button is disabled so it matches the
-                  // app-wide "disabled = solid orange100 with white text" pattern.
+                  // Verberg de rand als de knop uitgeschakeld is zodat het overeenkomt
+                  // met het app-brede patroon "uitgeschakeld = oranje100 achtergrond met witte tekst".
                   side: WidgetStateProperty.resolveWith<BorderSide?>((states) {
                     if (states.contains(WidgetState.disabled)) {
                       return BorderSide.none;
@@ -404,6 +410,7 @@ class _ProfilePageState extends State<ProfilePage> {
     ];
   }
 
+  /// Bouwt een rij met synchronisatiestatus (icoon, tekst en tijdstip).
   Widget _buildSyncStatusRow({
     required SyncService sync,
     required bool online,
@@ -479,6 +486,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Formatteert een tijdstip relatief t.o.v. nu (bijv. "5 minuten geleden").
   String _formatRelative(DateTime time) {
     final diff = DateTime.now().difference(time);
     if (diff.inSeconds < 60) return 'zojuist';
@@ -488,6 +496,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return '${time.day}/${time.month}/${time.year}';
   }
 
+  /// Opent de auth-pagina in de opgegeven modus (aanmelden of registreren).
   Future<void> _openAuthPage(BuildContext context, AuthMode mode) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => AuthPage(initialMode: mode)),
@@ -495,6 +504,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) setState(() {});
   }
 
+  /// Toont een bevestigingsdialoog vóór het uitloggen.
   Future<void> _confirmSignOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -551,6 +561,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Bouwt een informatierij met icoon, label en waarde.
   Widget _buildInfoRow({
     required IconData icon,
     required String label,
@@ -587,6 +598,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Bouwt de themaselectierij die de actieve themamodus toont.
   Widget _buildThemeRow() {
     final controller = AppThemeController.instance;
     return AnimatedBuilder(
@@ -634,6 +646,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Geeft het weergavelabel terug voor een gegeven [ThemeMode].
   String _labelForMode(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.system:
@@ -645,6 +658,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Toont een sheet om de themamodus te kiezen (licht, donker of systeem).
   Future<void> _showThemeSheet(BuildContext context) async {
     final controller = AppThemeController.instance;
     final selected = await showModalBottomSheet<ThemeMode>(
@@ -744,6 +758,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Bouwt een schakelaarrij voor een boolean instelling.
   Widget _buildToggleRow({
     required IconData icon,
     required String label,
@@ -861,7 +876,7 @@ class _ProfilePageState extends State<ProfilePage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Restart prompt shown after reset
+// Herstart-prompt getoond na het resetten van de app
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RestartPromptScreen extends StatelessWidget {

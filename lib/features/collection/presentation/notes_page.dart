@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 
+/// Notities-editor voor een collectie-item met automatisch opslaan en undo/redo.
 class NotesPage extends StatefulWidget {
   const NotesPage({
     super.key,
@@ -13,7 +14,10 @@ class NotesPage extends StatefulWidget {
     required this.initialNotes,
   });
 
+  /// ID van het collectie-item waaraan de notities gekoppeld zijn.
   final int itemId;
+
+  /// Initiële notitietekst die ingeladen wordt bij het openen.
   final String initialNotes;
 
   @override
@@ -26,7 +30,7 @@ class _NotesPageState extends State<NotesPage> {
   Timer? _debounce;
   bool _isDirty = false;
 
-  // Undo/redo history — snapshots taken after each debounce save
+  // Undo/redo-geschiedenis — momentopnamen na elke debounceopslag.
   final List<String> _history = [];
   int _historyIndex = -1;
   bool _skipHistoryUpdate = false;
@@ -50,6 +54,7 @@ class _NotesPageState extends State<NotesPage> {
     super.dispose();
   }
 
+  /// Debounced listener: plant een automatisch opslaan na 800 ms inactiviteit.
   void _onChanged() {
     if (_skipHistoryUpdate) return;
     _isDirty = true;
@@ -57,6 +62,7 @@ class _NotesPageState extends State<NotesPage> {
     _debounce = Timer(const Duration(milliseconds: 800), _commitChange);
   }
 
+  /// Voert de opslag uit en voegt een snapshot toe aan de geschiedenis.
   void _commitChange() {
     final text = _controller.text;
     _isDirty = false;
@@ -71,6 +77,7 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  /// Slaat de tekst op in de database.
   Future<void> _save(String text) async {
     final item = await DatabaseHelper.instance.getCollectionItemById(
       widget.itemId,
@@ -81,6 +88,7 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
+  /// Slaat eventuele niet-opgeslagen wijzigingen op en keert terug.
   Future<void> _popWithSave() async {
     _debounce?.cancel();
     if (_isDirty) {
@@ -90,6 +98,7 @@ class _NotesPageState extends State<NotesPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Ongedaan maken: stapje terug in de geschiedenis.
   void _undo() {
     if (_historyIndex <= 0) return;
     _debounce?.cancel();
@@ -97,6 +106,7 @@ class _NotesPageState extends State<NotesPage> {
     _applyEntry();
   }
 
+  /// Opnieuw toepassen: stapje vooruit in de geschiedenis.
   void _redo() {
     if (_historyIndex >= _history.length - 1) return;
     _debounce?.cancel();
@@ -104,6 +114,7 @@ class _NotesPageState extends State<NotesPage> {
     _applyEntry();
   }
 
+  /// Past een historische momentopname toe op de teksteditor.
   void _applyEntry() {
     final text = _history[_historyIndex];
     _skipHistoryUpdate = true;
@@ -116,6 +127,7 @@ class _NotesPageState extends State<NotesPage> {
     setState(() {});
   }
 
+  /// Toont een bevestigingsdialoog om alle notities te wissen.
   void _showClearDialog() {
     showDialog<void>(
       context: context,

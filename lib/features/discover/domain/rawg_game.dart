@@ -1,3 +1,4 @@
+/// Compacte game-samenvatting zoals teruggegeven door de RAWG-lijstendpunten.
 class RawgGame {
   const RawgGame({
     required this.id,
@@ -5,10 +6,16 @@ class RawgGame {
     required this.coverUrl,
   });
 
+  /// Uniek RAWG-spel-ID.
   final int id;
+
+  /// Displaynaam van het spel.
   final String title;
+
+  /// URL van de omslagafbeelding, of null als niet beschikbaar.
   final String? coverUrl;
 
+  /// Maakt een [RawgGame] aan vanuit een JSON-object.
   factory RawgGame.fromJson(Map<String, dynamic> json) {
     return RawgGame(
       id: json['id'] as int? ?? 0,
@@ -18,6 +25,7 @@ class RawgGame {
   }
 }
 
+/// Uitgebreide gamedetails zoals teruggegeven door het RAWG detail-eindpunt.
 class RawgGameDetails {
   const RawgGameDetails({
     required this.id,
@@ -34,19 +42,43 @@ class RawgGameDetails {
     required this.ageRating,
   });
 
+  /// Uniek RAWG-spel-ID.
   final int id;
+
+  /// Displaynaam van het spel.
   final String title;
+
+  /// Platte tekstomschrijving (zonder HTML-tags).
   final String description;
+
+  /// URL van de omslagafbeelding, of null.
   final String? coverUrl;
+
+  /// Releasedatum als tekenreeks (bijv. '2022-03-15'), of null.
   final String? released;
+
+  /// Gemiddelde RAWG-gebruikersbeoordeling (0–5), of null.
   final double? rating;
+
+  /// Lijst van platformen waarop het spel beschikbaar is.
   final List<String> platforms;
+
+  /// Genres van het spel.
   final List<String> genres;
+
+  /// Ontwikkelaar(s) van het spel.
   final List<String> developers;
+
+  /// Uitgever(s) van het spel.
   final List<String> publishers;
+
+  /// RAWG-tags gekoppeld aan het spel.
   final List<String> tags;
+
+  /// Gemapt ESRB-leeftijdsadvies in leesbaar Nederlands, of null.
   final String? ageRating;
 
+  /// Maakt een [RawgGameDetails] aan vanuit een JSON-object.
   factory RawgGameDetails.fromJson(Map<String, dynamic> json) {
     List<String> extractNames(String key) {
       if (json[key] == null) return <String>[];
@@ -70,23 +102,21 @@ class RawgGameDetails {
         .cast<String>()
         .toList();
 
+    // Vertaaltabel voor ESRB-leeftijdskeuringen naar leesbare Nederlandse labels.
+    const esrbLabels = {
+      'Everyone': 'Alle leeftijden (Everyone)',
+      'Everyone 10+': '10+ (Everyone 10+)',
+      'Teen': '13+ (Teen)',
+      'Mature': '17+ (Mature)',
+      'Adults Only': '18+ (Adults Only)',
+      'Rating Pending': 'Beoordeling in afwachting',
+    };
+
     final esrb = json['esrb_rating'] as Map<String, dynamic>?;
-    String? ageRatingName = esrb?['name'] as String?;
-    if (ageRatingName != null) {
-      if (ageRatingName == 'Everyone') {
-        ageRatingName = 'Alle leeftijden (Everyone)';
-      } else if (ageRatingName == 'Everyone 10+') {
-        ageRatingName = '10+ (Everyone 10+)';
-      } else if (ageRatingName == 'Teen') {
-        ageRatingName = '13+ (Teen)';
-      } else if (ageRatingName == 'Mature') {
-        ageRatingName = '17+ (Mature)';
-      } else if (ageRatingName == 'Adults Only') {
-        ageRatingName = '18+ (Adults Only)';
-      } else if (ageRatingName == 'Rating Pending') {
-        ageRatingName = 'Beoordeling in afwachting';
-      }
-    }
+    final rawRating = esrb?['name'] as String?;
+    final ageRatingName = rawRating != null
+        ? (esrbLabels[rawRating] ?? rawRating)
+        : null;
 
     return RawgGameDetails(
       id: json['id'] as int? ?? 0,
@@ -107,6 +137,7 @@ class RawgGameDetails {
   }
 }
 
+/// Eén RAWG-achievement gekoppeld aan een spel, inclusief behaaldpercentage.
 class RawgAchievement {
   const RawgAchievement({
     required this.id,
@@ -116,12 +147,22 @@ class RawgAchievement {
     required this.percent,
   });
 
+  /// Uniek RAWG-achievement-ID.
   final int id;
+
+  /// Naam van het achievement.
   final String name;
+
+  /// Omschrijving van de benodigde actie.
   final String description;
+
+  /// URL van het achievement-icoon, of null.
   final String? imageUrl;
+
+  /// Percentage spelers dat dit achievement heeft behaald (0–100), of null.
   final double? percent;
 
+  /// Maakt een [RawgAchievement] aan vanuit een JSON-object.
   factory RawgAchievement.fromJson(Map<String, dynamic> json) {
     return RawgAchievement(
       id: json['id'] as int? ?? 0,

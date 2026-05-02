@@ -4,21 +4,32 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
-/// Reports whether the device currently has a working internet connection.
+/// Meldt of het toestel momenteel een werkende internetverbinding heeft.
 ///
-/// Uses `connectivity_plus` for transport-level events and a lightweight
-/// `InternetAddress.lookup` to confirm actual reachability.
+/// Gebruikt `connectivity_plus` voor transportgebeurtenissen en een lichte
+/// `InternetAddress.lookup` om daadwerkelijke bereikbaarheid te bevestigen.
 class ConnectivityService extends ChangeNotifier {
   ConnectivityService._();
+
+  /// Singleton-instantie, globaal toegankelijk.
   static final ConnectivityService instance = ConnectivityService._();
 
+  // Onderliggende connectivity-plugin.
   final Connectivity _connectivity = Connectivity();
+
+  // Actief luisterabonnement op connectiviteitswijzigingen.
   StreamSubscription<List<ConnectivityResult>>? _sub;
+
+  // Huidige online-status.
   bool _isOnline = false;
+
+  // Voorkomt dubbele initialisatie.
   bool _initialized = false;
 
+  /// True als het toestel momenteel online is.
   bool get isOnline => _isOnline;
 
+  /// Initialiseert de service en start het luisteren op verbindingswijzigingen.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
@@ -26,6 +37,7 @@ class ConnectivityService extends ChangeNotifier {
     _sub = _connectivity.onConnectivityChanged.listen((_) => _refresh());
   }
 
+  /// Controleert opnieuw de connectiviteitstatus en werkt [isOnline] bij.
   Future<void> _refresh() async {
     final results = await _connectivity.checkConnectivity();
     final hasTransport = results.any((r) => r != ConnectivityResult.none);
@@ -39,12 +51,13 @@ class ConnectivityService extends ChangeNotifier {
     }
   }
 
-  /// Public hook to re-check connectivity (e.g. after a manual sync attempt).
+  /// Publieke hook om de verbinding opnieuw te controleren (bijv. na handmatige sync).
   Future<bool> recheck() async {
     await _refresh();
     return _isOnline;
   }
 
+  /// Test daadwerkelijke internetbereikbaarheid via een DNS-lookup.
   Future<bool> _hasInternet() async {
     try {
       final result = await InternetAddress.lookup(
@@ -56,6 +69,7 @@ class ConnectivityService extends ChangeNotifier {
     }
   }
 
+  /// Annuleert het connectiviteitsabonnement bij dispose.
   @override
   void dispose() {
     _sub?.cancel();
