@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -25,6 +26,9 @@ class NotificationService {
   /// Initialiseert de notificatieplugin voor iOS en Android.
   Future<void> initialize() async {
     tz.initializeTimeZones();
+    // Stel de lokale tijdzone in zodat geplande notificaties op het juiste lokale uur worden afgeleverd.
+    final localTz = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(localTz));
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
