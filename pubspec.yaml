@@ -27,6 +27,7 @@ dependencies:
   cloud_firestore: ^5.4.4
   connectivity_plus: ^6.0.5
   shared_preferences: ^2.3.2
+  flutter_secure_storage: ^10.0.0
 
 dev_dependencies:
   flutter_test:

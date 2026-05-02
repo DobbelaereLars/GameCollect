@@ -8,6 +8,7 @@ import 'dart:async';
 import 'app.dart';
 import 'core/database/database_helper.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/storage/secure_storage_service.dart';
 import 'core/sync/auth_service.dart';
 import 'core/sync/connectivity_service.dart';
 import 'core/sync/sync_service.dart';
@@ -30,6 +31,9 @@ Future<void> main() async {
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {}
+
+  // Migreer de RAWG API-sleutel naar de veilige opslag (Keychain / EncryptedSharedPreferences).
+  await SecureStorageService.initialize();
 
   await NotificationService.instance.initialize();
 

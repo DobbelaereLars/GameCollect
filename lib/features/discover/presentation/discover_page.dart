@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -40,7 +40,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   static const Duration _searchDebounce = Duration(milliseconds: 800);
 
   /// RAWG API-sleutel uit het .env-bestand.
-  String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
+  String get _rawgApiKey => SecureStorageService.rawgApiKey;
 
   /// True als de camera-knop getoond moet worden (alleen iOS en Android).
   bool get _showCameraButton {

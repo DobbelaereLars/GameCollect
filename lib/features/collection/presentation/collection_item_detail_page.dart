@@ -4,7 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -129,7 +129,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     // Firebase) maar de lokale game_achievements-tabel nog geen definities bevat.
     // Dit treedt op als een collectie-item op een nieuw toestel hersteld wordt.
     if (achievements.isEmpty && item.achievementStates.isNotEmpty) {
-      final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      final apiKey = SecureStorageService.rawgApiKey;
       if (apiKey.isNotEmpty) {
         final client = http.Client();
         try {
@@ -3205,7 +3205,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 
   Future<void> _refreshGameData() async {
-    final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+    final apiKey = SecureStorageService.rawgApiKey;
     if (apiKey.isEmpty) return;
     setState(() => _isRefreshing = true);
     final messenger = ScaffoldMessenger.of(context);

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -73,7 +73,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       }).toList();
 
       List<AchievementState> initialStates = const [];
-      final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      final rawgApiKey = SecureStorageService.rawgApiKey;
       if (rawgApiKey.isNotEmpty) {
         final hasAchievements = await DatabaseHelper.instance
             .hasAchievementsForGame(widget.game.id);

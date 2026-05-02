@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -45,7 +45,7 @@ class _OverviewPageState extends State<OverviewPage> {
   Timer? _slowConnectionTimer;
 
   /// RAWG API-sleutel uit het .env-bestand.
-  String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
+  String get _rawgApiKey => SecureStorageService.rawgApiKey;
 
   // ── Levenscyclus ──────────────────────────────────────────────────────────
 
