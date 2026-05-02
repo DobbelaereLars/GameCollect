@@ -93,14 +93,13 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) =>
-            GameCollectShell(key: ValueKey(brightness)),
+        pageBuilder: (_, _, _) => GameCollectShell(key: ValueKey(brightness)),
         transitionDuration: const Duration(milliseconds: 420),
         reverseTransitionDuration: Duration.zero,
-        transitionsBuilder: (_, animation, __, child) {
+        transitionsBuilder: (_, animation, _, child) {
           return AnimatedBuilder(
             animation: animation,
-            builder: (_, __) {
+            builder: (_, _) {
               final t = Curves.easeIn.transform(animation.value);
               // Groei van icoongrootte naar 2× diagonaal zodat het scherm altijd volledig bedekt is.
               final side = lerpDouble(_iconSize, diagonal * 2, t)!;
@@ -137,7 +136,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       body: Center(
         child: AnimatedBuilder(
           animation: Listenable.merge([_bounceCtrl, _zoomCtrl]),
-          builder: (_, __) => Opacity(
+          builder: (_, _) => Opacity(
             opacity: _zooming ? 1.0 : _bounceOpacity.value,
             child: Transform.scale(
               scale: _zooming ? _zoomScale.value : _bounceScale.value,

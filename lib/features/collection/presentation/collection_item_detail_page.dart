@@ -55,13 +55,11 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   List<GameAchievementWithState> _displayAchievements = [];
 
   // Paginering van achievements en vertraagde hersortering.
-  int _achievementPage = 0;
   Timer? _sortTimer;
 
   // Vereisten (requirements)
   List<CustomRequirement> _requirements = [];
   List<CustomRequirement> _displayRequirements = [];
-  int _requirementPage = 0;
   Timer? _requirementSortTimer;
 
   InputDecoration _orangeInputDecoration({
@@ -796,7 +794,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
@@ -1210,23 +1208,71 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(item),
+                    _GameDetailHeader(
+                      item: item,
+                      formatMinutes: _formatMinutes,
+                      onEditTags: _showTagsOnboardingSheet,
+                    ),
                     if (_achievements.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                       const SizedBox(height: 24),
-                      _buildAchievementsSection(),
+                      _AchievementsSection(
+                        achievements: _achievements,
+                        displayAchievements: _displayAchievements,
+                        achievementsPerPage: _achievementsPerPage,
+                        onToggleCompleted: _toggleAchievementCompleted,
+                        onToggleEnabled: _toggleAchievementEnabled,
+                        onShowModal: _showAchievementModal,
+                      ),
                     ],
                     const SizedBox(height: 24),
                     Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
-                    _buildRequirementsSection(),
+                    _RequirementsSection(
+                      requirements: _requirements,
+                      displayRequirements: _displayRequirements,
+                      achievementsPerPage: _achievementsPerPage,
+                      onToggleCompleted: _toggleRequirementCompleted,
+                      onToggleEnabled: _toggleRequirementEnabled,
+                      onShowModal: _showRequirementModal,
+                      onAddRequirement: _showAddRequirementSheet,
+                      onDeleteRequirement: _showDeleteRequirementConfirmSheet,
+                    ),
                     const SizedBox(height: 24),
                     Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
-                    _buildPlaytimeSummaryTile(item),
+                    _PlaytimeSummaryTile(
+                      formattedTime: _formatMinutes(item.totalPlaytimeMinutes),
+                      zeroPlaytime: item.totalPlaytimeMinutes == 0,
+                      onTap: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => PlaytimePage(
+                              itemId: item.id!,
+                              gameTitle: item.title,
+                              initialEntries: item.playtimeEntries,
+                            ),
+                          ),
+                        );
+                        final refreshed = await DatabaseHelper.instance
+                            .getCollectionItemById(widget.itemId);
+                        if (mounted && refreshed != null) {
+                          setState(() => _item = refreshed);
+                        }
+                      },
+                    ),
                     const SizedBox(height: 8),
-                    _buildDiscoverTile(item),
+                    _DiscoverTile(
+                      onTap: () {
+                        DiscoverPage.gameDetailRequest.value = null;
+                        DiscoverPage.gameDetailRequest.value = (
+                          gameId: item.apiId,
+                          fallbackTitle: item.title,
+                          fallbackCoverUrl: item.coverUrl,
+                        );
+                      },
+                    ),
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -1292,203 +1338,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  /// Bouwt de heroheader met omslagafbeelding, titel, platform en voortgangsbalk.
-  Widget _buildHeader(CollectionItem item) {
-    final tagActionLabel = item.activeTags.isEmpty
-        ? 'Tags toevoegen'
-        : 'Tags bewerken';
-    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
-        ? item.selectedPlatforms.first
-        : '';
-    final platformName = _extractPlatformName(primaryPlatformWithFormat);
-    final formatName = _extractFormatName(
-      primaryPlatformWithFormat,
-      fallback: item.format,
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                item.customCoverPath != null
-                    ? Image.file(
-                        File(item.customCoverPath!),
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildCoverPlaceholder(),
-                      )
-                    : (item.coverUrl != null
-                          ? Image.network(
-                              item.coverUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildCoverPlaceholder(),
-                            )
-                          : _buildCoverPlaceholder()),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildCoverBadge(
-                        icon: LucideIcons.gamepad2,
-                        text: platformName,
-                      ),
-                      const SizedBox(height: 6),
-                      _buildCoverBadge(
-                        icon: _formatIconFor(formatName),
-                        text: formatName,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          item.title,
-          style: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 32,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            color: AppTheme.black,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ...item.activeTags.map((tag) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.orange100),
-                ),
-                child: Text(
-                  tag,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: AppTheme.black,
-                  ),
-                ),
-              );
-            }),
-            TextButton(
-              onPressed: _showTagsOnboardingSheet,
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.orange500,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                minimumSize: const Size(0, 0),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(tagActionLabel),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildHeaderMetaRow(
-          icon: LucideIcons.clock3,
-          text: 'Speelduur: ${_formatMinutes(item.totalPlaytimeMinutes)}',
-        ),
-        const SizedBox(height: 6),
-        if (item.publisher != null && item.publisher!.isNotEmpty)
-          _buildHeaderMetaRow(
-            icon: LucideIcons.building,
-            text: item.publisher!,
-          ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Semantics(
-                label: 'Voortgang',
-                value: '${(item.progressRatio * 100).round()}%',
-                child: LinearProgressIndicator(
-                  value: item.progressRatio,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(999),
-                  backgroundColor: AppTheme.progressTrack,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppTheme.orange500,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${(item.progressRatio * 100).round()}%',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: AppTheme.black,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Bouwt een icoon+tekst-rij voor de header-metagegevens.
-  Widget _buildHeaderMetaRow({
-    required IconData icon,
-    required String text,
-    Color? textColor,
-  }) {
-    final color = textColor ?? AppTheme.gray500;
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: AppTheme.gray500),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-              color: color,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Extraheert de platformnaam zonder formaatnotatie (bijv. "PlayStation 5" uit "PlayStation 5 (Fysiek)").
-  String _extractPlatformName(String platformWithFormat) {
-    if (platformWithFormat.isEmpty) {
-      return 'Onbekend platform';
-    }
-    final match = RegExp(
-      r'^(.*?)(?:\s*\([^)]*\))?$',
-    ).firstMatch(platformWithFormat);
-    return match?.group(1)?.trim() ?? platformWithFormat;
-  }
-
   /// Opent de instellingenpagina voor dit collectie-item.
   Future<void> _openSettingsPage(CollectionItem item) async {
     final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
@@ -1518,690 +1367,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     if (mounted && refreshed != null) {
       setState(() => _item = refreshed);
     }
-  }
-
-  /// Extraheert de formaatnotatie uit een platform+formaat-string (bijv. "Fysiek").
-  String _extractFormatName(String platformWithFormat, {String? fallback}) {
-    final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
-    final value = match?.group(1)?.trim();
-    if (value != null && value.isNotEmpty) {
-      return value;
-    }
-    return (fallback == null || fallback.isEmpty)
-        ? 'Fysiek & Digitaal'
-        : fallback;
-  }
-
-  /// Geeft het bijpassende icoon terug op basis van de formaatnaam.
-  IconData _formatIconFor(String formatName) {
-    if (formatName == 'Fysiek') {
-      return LucideIcons.disc;
-    }
-    if (formatName == 'Digitaal') {
-      return LucideIcons.download;
-    }
-    return LucideIcons.layers;
-  }
-
-  /// Bouwt een badge-widget (icoon + tekst) voor de omslagafbeelding.
-  Widget _buildCoverBadge({required IconData icon, required String text}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppTheme.orange500),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-              color: AppTheme.orange700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Bouwt een placeholder-widget als er geen omslagafbeelding beschikbaar is.
-  Widget _buildCoverPlaceholder() {
-    return Container(
-      color: AppTheme.orange50,
-      child: Center(
-        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 30),
-      ),
-    );
-  }
-
-  /// Bouwt een tegel die de totale speelduur toont en naar de speelduurpagina navigeert.
-  Widget _buildPlaytimeSummaryTile(CollectionItem item) {
-    return GestureDetector(
-      onTap: () async {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => PlaytimePage(
-              itemId: item.id!,
-              gameTitle: item.title,
-              initialEntries: item.playtimeEntries,
-            ),
-          ),
-        );
-        final refreshed = await DatabaseHelper.instance.getCollectionItemById(
-          widget.itemId,
-        );
-        if (mounted && refreshed != null) {
-          setState(() => _item = refreshed);
-        }
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          border: Border.all(color: AppTheme.gray100),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.orange50,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.clock,
-                size: 18,
-                color: AppTheme.orange600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Speelduur',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                  Text(
-                    item.totalPlaytimeMinutes == 0
-                        ? 'Nog geen speelduur geregistreerd'
-                        : _formatMinutes(item.totalPlaytimeMinutes),
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: item.totalPlaytimeMinutes == 0
-                          ? AppTheme.gray300
-                          : AppTheme.gray500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDiscoverTile(CollectionItem item) {
-    return GestureDetector(
-      onTap: () {
-        // Zet eerst null zodat dezelfde game meerdere keren aangevraagd kan worden.
-        DiscoverPage.gameDetailRequest.value = null;
-        DiscoverPage.gameDetailRequest.value = (
-          gameId: item.apiId,
-          fallbackTitle: item.title,
-          fallbackCoverUrl: item.coverUrl,
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          border: Border.all(color: AppTheme.gray100),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.orange50,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.search,
-                size: 18,
-                color: AppTheme.orange600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bekijk in Ontdekken',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                  Text(
-                    'Bekijk de gamepagina met details.',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppTheme.gray500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAchievementsSection() {
-    // Geen achievements aanwezig — verberg het volledige gedeelte.
-    if (_achievements.isEmpty) return const SizedBox.shrink();
-
-    final enabled = _displayAchievements.where((a) => a.isEnabled).toList();
-    final disabled = _achievements.where((a) => !a.isEnabled).toList();
-    final completedCount = enabled.where((a) => a.isCompleted).length;
-    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
-
-    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
-    final safePage = _achievementPage.clamp(0, totalPages - 1);
-    final pageStart = safePage * _achievementsPerPage;
-    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
-    final pageItems = enabled.sublist(pageStart, pageEnd);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Koptekstrij met titel, score en zichtbaarheidsindicator.
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Achievements',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                  color: AppTheme.black,
-                ),
-              ),
-            ),
-            // Score — oranje als alles afgevinkt
-            Text(
-              '$completedCount/${enabled.length}',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: allDone ? AppTheme.orange500 : AppTheme.gray500,
-              ),
-            ),
-            const SizedBox(width: 16),
-            // Oogpictogram — zelfde grootte als de score, oranje.
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DisabledAchievementsPage(
-                    initialAchievements: disabled,
-                    onToggleCompleted: _toggleAchievementCompleted,
-                    onToggleEnabled: _toggleAchievementEnabled,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    LucideIcons.eyeOff,
-                    size: 12,
-                    color: AppTheme.orange500,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '(${disabled.length})',
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                      color: AppTheme.orange500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-
-        // Actieve achievements op de huidige pagina.
-        ...pageItems.map((a) => _buildAchievementTile(a)),
-
-        // Pagineringsbesturing — vaste breedte van de teller voorkomt verschuiving van knoppen.
-        if (totalPages > 1) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildPageButton(
-                icon: LucideIcons.chevronLeft,
-                enabled: safePage > 0,
-                onTap: () => setState(() => _achievementPage = safePage - 1),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '${safePage + 1} / $totalPages',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.gray700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildPageButton(
-                icon: LucideIcons.chevronRight,
-                enabled: safePage < totalPages - 1,
-                onTap: () => setState(() => _achievementPage = safePage + 1),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildPageButton({
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: enabled ? AppTheme.orange50 : AppTheme.gray100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: enabled ? AppTheme.orange200 : AppTheme.gray100,
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: enabled ? AppTheme.orange700 : AppTheme.gray300,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAchievementTile(GameAchievementWithState achievement) {
-    final isDisabled = !achievement.isEnabled;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: Checkbox(
-              value: achievement.isCompleted,
-              onChanged: isDisabled
-                  ? null
-                  : (value) => _toggleAchievementCompleted(
-                      achievement.rawgId,
-                      value ?? false,
-                    ),
-              activeColor: AppTheme.orange500,
-              side: BorderSide(
-                color: isDisabled ? AppTheme.gray300 : AppTheme.gray300,
-              ),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: InkWell(
-              onTap: () => _showAchievementModal(achievement),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: achievement.imageUrl != null
-                          ? Image.network(
-                              achievement.imageUrl!,
-                              width: 36,
-                              height: 36,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildAchievementImagePlaceholder(),
-                            )
-                          : _buildAchievementImagePlaceholder(),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        achievement.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          height: 1.4,
-                          color: isDisabled ? AppTheme.gray300 : AppTheme.black,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _toggleAchievementEnabled(
-              achievement.rawgId,
-              !achievement.isEnabled,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.eyeOff,
-                size: 18,
-                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAchievementImagePlaceholder() {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Icon(
-        LucideIcons.trophy,
-        size: 18,
-        color: AppTheme.orange300,
-      ),
-    );
-  }
-
-  Widget _buildRequirementsSection() {
-    final enabled = _displayRequirements.where((r) => r.isEnabled).toList();
-    final disabled = _requirements.where((r) => !r.isEnabled).toList();
-    final completedCount = enabled.where((r) => r.isCompleted).length;
-    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
-
-    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
-    final safePage = _requirementPage.clamp(0, totalPages - 1);
-    final pageStart = safePage * _achievementsPerPage;
-    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
-    final pageItems = enabled.isEmpty
-        ? <CustomRequirement>[]
-        : enabled.sublist(pageStart, pageEnd);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Vereisten',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                  color: AppTheme.black,
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: _showAddRequirementSheet,
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(
-                  LucideIcons.plus,
-                  size: 18,
-                  color: AppTheme.orange500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              '$completedCount/${enabled.length}',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: allDone && enabled.isNotEmpty
-                    ? AppTheme.orange500
-                    : AppTheme.gray500,
-              ),
-            ),
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DisabledRequirementsPage(
-                    initialRequirements: disabled,
-                    onToggleCompleted: _toggleRequirementCompleted,
-                    onToggleEnabled: _toggleRequirementEnabled,
-                    onDelete: _deleteRequirement,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    LucideIcons.eyeOff,
-                    size: 12,
-                    color: AppTheme.orange500,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '(${disabled.length})',
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                      color: AppTheme.orange500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if (enabled.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Nog geen vereisten. Tik op + om er een toe te voegen.',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                height: 1.5,
-                color: AppTheme.gray500,
-              ),
-            ),
-          )
-        else
-          ...pageItems.map((r) => _buildRequirementTile(r)),
-        if (totalPages > 1) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildPageButton(
-                icon: LucideIcons.chevronLeft,
-                enabled: safePage > 0,
-                onTap: () => setState(() => _requirementPage = safePage - 1),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '${safePage + 1} / $totalPages',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.gray700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildPageButton(
-                icon: LucideIcons.chevronRight,
-                enabled: safePage < totalPages - 1,
-                onTap: () => setState(() => _requirementPage = safePage + 1),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildRequirementTile(CustomRequirement requirement) {
-    final isDisabled = !requirement.isEnabled;
-    final displayText = requirement.title?.isNotEmpty == true
-        ? requirement.title!
-        : requirement.description;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: Checkbox(
-              value: requirement.isCompleted,
-              onChanged: isDisabled
-                  ? null
-                  : (value) => _toggleRequirementCompleted(
-                      requirement.id,
-                      value ?? false,
-                    ),
-              activeColor: AppTheme.orange500,
-              side: BorderSide(color: AppTheme.gray300),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: InkWell(
-              onTap: () => _showRequirementModal(requirement),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Text(
-                  displayText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                    height: 1.4,
-                    color: isDisabled ? AppTheme.gray300 : AppTheme.black,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _toggleRequirementEnabled(
-              requirement.id,
-              !requirement.isEnabled,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.eyeOff,
-                size: 18,
-                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _showDeleteRequirementConfirmSheet(requirement.id),
-            child: Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.trash2,
-                size: 18,
-                color: AppTheme.gray500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -2311,7 +1476,7 @@ class _AddRequirementSheetContentState
                   ).copyWith(
                     suffix: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _titleController,
-                      builder: (_, v, __) => Text(
+                      builder: (_, v, _) => Text(
                         '${v.text.length}/30',
                         style: TextStyle(
                           fontFamily: 'Manrope',
@@ -2342,7 +1507,7 @@ class _AddRequirementSheetContentState
                     suffix: _descFocused
                         ? ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _descriptionController,
-                            builder: (_, v, __) => Text(
+                            builder: (_, v, _) => Text(
                               '${v.text.length}/250',
                               style: TextStyle(
                                 fontFamily: 'Manrope',
@@ -2359,7 +1524,7 @@ class _AddRequirementSheetContentState
             const SizedBox(height: 24),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _descriptionController,
-              builder: (_, descValue, __) {
+              builder: (_, descValue, _) {
                 final canSave = !_isSaving && descValue.text.trim().isNotEmpty;
                 return ElevatedButton.icon(
                   onPressed: canSave
@@ -2370,6 +1535,7 @@ class _AddRequirementSheetContentState
                             _descriptionController.text.trim(),
                           );
                           if (!mounted) return;
+                          // ignore: use_build_context_synchronously
                           Navigator.of(context).pop();
                         }
                       : null,
@@ -2823,7 +1989,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                 File(_customCoverPath!),
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => _buildCoverFallback(),
+                errorBuilder: (_, _, _) => _buildCoverFallback(),
               ),
               Positioned(
                 left: 0,
@@ -2867,7 +2033,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
           child: Image.network(
             widget.item.coverUrl!,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildCoverFallback(),
+            errorBuilder: (_, _, _) => _buildCoverFallback(),
           ),
         ),
       );
@@ -3384,3 +2550,1046 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
 // ── Platform toevoegen ────────────────────────────────────────────────────────
 // Gedelegeerd naar widgets/add_platform_sheet.dart (AddPlatformSheet)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top-level utility functions (pure, stateless)
+// ─────────────────────────────────────────────────────────────────────────────
+
+String _extractPlatformName(String platformWithFormat) {
+  if (platformWithFormat.isEmpty) return 'Onbekend platform';
+  final match = RegExp(
+    r'^(.*?)(?:\s*\([^)]*\))?$',
+  ).firstMatch(platformWithFormat);
+  return match?.group(1)?.trim() ?? platformWithFormat;
+}
+
+String _extractFormatName(String platformWithFormat, {String? fallback}) {
+  final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+  final value = match?.group(1)?.trim();
+  if (value != null && value.isNotEmpty) return value;
+  return (fallback == null || fallback.isEmpty)
+      ? 'Fysiek & Digitaal'
+      : fallback;
+}
+
+IconData _formatIconFor(String formatName) {
+  if (formatName == 'Fysiek') return LucideIcons.disc;
+  if (formatName == 'Digitaal') return LucideIcons.download;
+  return LucideIcons.layers;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _GameDetailHeader — hero section: cover, title, tags, meta, progress bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GameDetailHeader extends StatelessWidget {
+  const _GameDetailHeader({
+    required this.item,
+    required this.formatMinutes,
+    required this.onEditTags,
+  });
+
+  final CollectionItem item;
+  final String Function(int) formatMinutes;
+  final VoidCallback onEditTags;
+
+  @override
+  Widget build(BuildContext context) {
+    final tagActionLabel = item.activeTags.isEmpty
+        ? 'Tags toevoegen'
+        : 'Tags bewerken';
+    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
+        ? item.selectedPlatforms.first
+        : '';
+    final platformName = _extractPlatformName(primaryPlatformWithFormat);
+    final formatName = _extractFormatName(
+      primaryPlatformWithFormat,
+      fallback: item.format,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                item.customCoverPath != null
+                    ? Image.file(
+                        File(item.customCoverPath!),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) => const _CoverPlaceholder(),
+                      )
+                    : (item.coverUrl != null
+                          ? Image.network(
+                              item.coverUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const _CoverPlaceholder(),
+                            )
+                          : const _CoverPlaceholder()),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _CoverBadge(
+                        icon: LucideIcons.gamepad2,
+                        text: platformName,
+                      ),
+                      const SizedBox(height: 6),
+                      _CoverBadge(
+                        icon: _formatIconFor(formatName),
+                        text: formatName,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          item.title,
+          style: TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+            color: AppTheme.black,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ...item.activeTags.map(
+              (tag) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.orange100),
+                ),
+                child: Text(
+                  tag,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    color: AppTheme.black,
+                  ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onEditTags,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.orange500,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(tagActionLabel),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _HeaderMetaRow(
+          icon: LucideIcons.clock3,
+          text: 'Speelduur: ${formatMinutes(item.totalPlaytimeMinutes)}',
+        ),
+        const SizedBox(height: 6),
+        if (item.publisher != null && item.publisher!.isNotEmpty)
+          _HeaderMetaRow(icon: LucideIcons.building, text: item.publisher!),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                label: 'Voortgang',
+                value: '${(item.progressRatio * 100).round()}%',
+                child: LinearProgressIndicator(
+                  value: item.progressRatio,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(999),
+                  backgroundColor: AppTheme.progressTrack,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppTheme.orange500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '${(item.progressRatio * 100).round()}%',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: AppTheme.black,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CoverBadge — icoon + tekst badge op omslagafbeelding
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CoverBadge extends StatelessWidget {
+  const _CoverBadge({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppTheme.orange500),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+              color: AppTheme.orange700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CoverPlaceholder — placeholder als er geen omslagafbeelding is
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.orange50,
+      child: Center(
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 30),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _HeaderMetaRow — icoon + tekst rij in de header
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeaderMetaRow extends StatelessWidget {
+  const _HeaderMetaRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: AppTheme.gray500),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+              color: AppTheme.gray500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _PlaytimeSummaryTile — tegel die navigeert naar de speelduurpagina
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PlaytimeSummaryTile extends StatelessWidget {
+  const _PlaytimeSummaryTile({
+    required this.formattedTime,
+    required this.zeroPlaytime,
+    required this.onTap,
+  });
+
+  final String formattedTime;
+  final bool zeroPlaytime;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.clock,
+                size: 18,
+                color: AppTheme.orange600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Speelduur',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  Text(
+                    zeroPlaytime
+                        ? 'Nog geen speelduur geregistreerd'
+                        : formattedTime,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: zeroPlaytime ? AppTheme.gray300 : AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _DiscoverTile — tegel die navigeert naar de gamepagina in Ontdekken
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DiscoverTile extends StatelessWidget {
+  const _DiscoverTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.search,
+                size: 18,
+                color: AppTheme.orange600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bekijk in Ontdekken',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  Text(
+                    'Bekijk de gamepagina met details.',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _PaginationButton — pijlknop voor paginering
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PaginationButton extends StatelessWidget {
+  const _PaginationButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? AppTheme.orange50 : AppTheme.gray100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: enabled ? AppTheme.orange200 : AppTheme.gray100,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? AppTheme.orange700 : AppTheme.gray300,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementImagePlaceholder — fallback afbeelding voor achievements
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementImagePlaceholder extends StatelessWidget {
+  const _AchievementImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Icon(
+        LucideIcons.trophy,
+        size: 18,
+        color: AppTheme.orange300,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementTile — één rij in de achievementlijst
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementTile extends StatelessWidget {
+  const _AchievementTile({
+    required this.achievement,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+  });
+
+  final GameAchievementWithState achievement;
+  final Future<void> Function(int rawgId, bool value) onToggleCompleted;
+  final Future<void> Function(int rawgId, bool value) onToggleEnabled;
+  final void Function(GameAchievementWithState) onShowModal;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = !achievement.isEnabled;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: achievement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) =>
+                        onToggleCompleted(achievement.rawgId, value ?? false),
+              activeColor: AppTheme.orange500,
+              side: BorderSide(color: AppTheme.gray300),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => onShowModal(achievement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: achievement.imageUrl != null
+                          ? Image.network(
+                              achievement.imageUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const _AchievementImagePlaceholder(),
+                            )
+                          : const _AchievementImagePlaceholder(),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        achievement.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                          color: isDisabled ? AppTheme.gray300 : AppTheme.black,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () =>
+                onToggleEnabled(achievement.rawgId, !achievement.isEnabled),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _RequirementTile — één rij in de vereistenlijst
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RequirementTile extends StatelessWidget {
+  const _RequirementTile({
+    required this.requirement,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+    required this.onDelete,
+  });
+
+  final CustomRequirement requirement;
+  final Future<void> Function(String id, bool value) onToggleCompleted;
+  final Future<void> Function(String id, bool value) onToggleEnabled;
+  final void Function(CustomRequirement) onShowModal;
+  final Future<void> Function(String id) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = !requirement.isEnabled;
+    final displayText = requirement.title?.isNotEmpty == true
+        ? requirement.title!
+        : requirement.description;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: requirement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) =>
+                        onToggleCompleted(requirement.id, value ?? false),
+              activeColor: AppTheme.orange500,
+              side: BorderSide(color: AppTheme.gray300),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => onShowModal(requirement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Text(
+                  displayText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    color: isDisabled ? AppTheme.gray300 : AppTheme.black,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () =>
+                onToggleEnabled(requirement.id, !requirement.isEnabled),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => onDelete(requirement.id),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.trash2,
+                size: 18,
+                color: AppTheme.gray500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementsSection — stateful sectie met paginering voor achievements
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementsSection extends StatefulWidget {
+  const _AchievementsSection({
+    required this.achievements,
+    required this.displayAchievements,
+    required this.achievementsPerPage,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+  });
+
+  final List<GameAchievementWithState> achievements;
+  final List<GameAchievementWithState> displayAchievements;
+  final int achievementsPerPage;
+  final Future<void> Function(int rawgId, bool value) onToggleCompleted;
+  final Future<void> Function(int rawgId, bool value) onToggleEnabled;
+  final void Function(GameAchievementWithState) onShowModal;
+
+  @override
+  State<_AchievementsSection> createState() => _AchievementsSectionState();
+}
+
+class _AchievementsSectionState extends State<_AchievementsSection> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.displayAchievements
+        .where((a) => a.isEnabled)
+        .toList();
+    final disabled = widget.achievements.where((a) => !a.isEnabled).toList();
+    final completedCount = enabled.where((a) => a.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(
+      1,
+      (enabled.length / widget.achievementsPerPage).ceil(),
+    );
+    final safePage = _page.clamp(0, totalPages - 1);
+    final pageStart = safePage * widget.achievementsPerPage;
+    final pageEnd = min(pageStart + widget.achievementsPerPage, enabled.length);
+    final pageItems = enabled.sublist(pageStart, pageEnd);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Achievements',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: allDone ? AppTheme.orange500 : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledAchievementsPage(
+                    initialAchievements: disabled,
+                    onToggleCompleted: widget.onToggleCompleted,
+                    onToggleEnabled: widget.onToggleEnabled,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ...pageItems.map(
+          (a) => _AchievementTile(
+            achievement: a,
+            onToggleCompleted: widget.onToggleCompleted,
+            onToggleEnabled: widget.onToggleEnabled,
+            onShowModal: widget.onShowModal,
+          ),
+        ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PaginationButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () => setState(() => _page = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _PaginationButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () => setState(() => _page = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _RequirementsSection — stateful sectie met paginering voor vereisten
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RequirementsSection extends StatefulWidget {
+  const _RequirementsSection({
+    required this.requirements,
+    required this.displayRequirements,
+    required this.achievementsPerPage,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+    required this.onAddRequirement,
+    required this.onDeleteRequirement,
+  });
+
+  final List<CustomRequirement> requirements;
+  final List<CustomRequirement> displayRequirements;
+  final int achievementsPerPage;
+  final Future<void> Function(String id, bool value) onToggleCompleted;
+  final Future<void> Function(String id, bool value) onToggleEnabled;
+  final void Function(CustomRequirement) onShowModal;
+  final VoidCallback onAddRequirement;
+  final Future<void> Function(String id) onDeleteRequirement;
+
+  @override
+  State<_RequirementsSection> createState() => _RequirementsSectionState();
+}
+
+class _RequirementsSectionState extends State<_RequirementsSection> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.displayRequirements
+        .where((r) => r.isEnabled)
+        .toList();
+    final disabled = widget.requirements.where((r) => !r.isEnabled).toList();
+    final completedCount = enabled.where((r) => r.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(
+      1,
+      (enabled.length / widget.achievementsPerPage).ceil(),
+    );
+    final safePage = _page.clamp(0, totalPages - 1);
+    final pageStart = safePage * widget.achievementsPerPage;
+    final pageEnd = min(pageStart + widget.achievementsPerPage, enabled.length);
+    final pageItems = enabled.isEmpty
+        ? <CustomRequirement>[]
+        : enabled.sublist(pageStart, pageEnd);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Vereisten',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: widget.onAddRequirement,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  LucideIcons.plus,
+                  size: 18,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: allDone && enabled.isNotEmpty
+                    ? AppTheme.orange500
+                    : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledRequirementsPage(
+                    initialRequirements: disabled,
+                    onToggleCompleted: widget.onToggleCompleted,
+                    onToggleEnabled: widget.onToggleEnabled,
+                    onDelete: widget.onDeleteRequirement,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (enabled.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Nog geen vereisten. Tik op + om er een toe te voegen.',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+                color: AppTheme.gray500,
+              ),
+            ),
+          )
+        else
+          ...pageItems.map(
+            (r) => _RequirementTile(
+              requirement: r,
+              onToggleCompleted: widget.onToggleCompleted,
+              onToggleEnabled: widget.onToggleEnabled,
+              onShowModal: widget.onShowModal,
+              onDelete: widget.onDeleteRequirement,
+            ),
+          ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PaginationButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () => setState(() => _page = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _PaginationButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () => setState(() => _page = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}

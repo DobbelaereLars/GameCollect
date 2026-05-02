@@ -176,8 +176,9 @@ class _AuthPageState extends State<AuthPage> {
                         final emailRegex = RegExp(
                           r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                         );
-                        if (!emailRegex.hasMatch(val))
+                        if (!emailRegex.hasMatch(val)) {
                           return 'Ongeldig e-mailadres.';
+                        }
                         return null;
                       },
                     ),
@@ -193,8 +194,9 @@ class _AuthPageState extends State<AuthPage> {
                       validator: (v) {
                         final val = v ?? '';
                         if (val.isEmpty) return 'Vul je wachtwoord in.';
-                        if (val.length < 6)
+                        if (val.length < 6) {
                           return 'Wachtwoord moet minstens 6 tekens bevatten.';
+                        }
                         return null;
                       },
                       suffix: IconButton(

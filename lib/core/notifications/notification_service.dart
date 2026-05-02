@@ -171,8 +171,9 @@ class NotificationService {
 
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint('[NotificationService] Alle notificaties geannuleerd.');
+    }
   }
 
   // ── Alles inplannen (opnieuw inschakelen) ───────────────────────────────────

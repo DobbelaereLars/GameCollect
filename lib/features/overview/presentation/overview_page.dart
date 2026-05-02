@@ -390,7 +390,7 @@ class _OverviewPageState extends State<OverviewPage> {
                   if (_isLoadingCollection)
                     const _HorizontalLoadingPlaceholder()
                   else if (_collectionItems.isEmpty)
-                    _EmptyCollectionCard()
+                    const _EmptyCollectionCard()
                   else
                     _HorizontalGroupList(
                       groups: _recentGroups,
@@ -590,6 +590,8 @@ class _HorizontalLoadingPlaceholder extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _EmptyCollectionCard extends StatelessWidget {
+  const _EmptyCollectionCard();
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;

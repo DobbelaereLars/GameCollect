@@ -10,7 +10,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gamecollect/features/discover/presentation/widgets/custom_lens_upload_view.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/scale_tap.dart';
 import '../data/rawg_games_api.dart';
+import '../domain/game_search_utils.dart';
 import '../domain/rawg_game.dart';
 import 'game_detail_page.dart';
 import 'widgets/discover_search_bar.dart';
@@ -210,7 +212,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
       setState(() {
         // Filter en sorteer alléén de gloednieuwe uit de API opgehaalde games
-        final processedNewGames = _sortGamesByRelevance(
+        final processedNewGames = GameSearchUtils.sortByRelevance(
           page.games,
           _activeQuery,
         );
@@ -316,87 +318,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _searchController.clear();
     _activeQuery = '';
     _fetchGames(reset: true);
-  }
-
-  List<RawgGame> _sortGamesByRelevance(List<RawgGame> games, String query) {
-    final normalizedQuery = _normalizeSearchText(query);
-    if (normalizedQuery.isEmpty) {
-      return games;
-    }
-
-    final queryTokens = normalizedQuery
-        .split(' ')
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-
-    // Verwijder games die absoluut niks te maken hebben met de zoekterm
-    final validGames = games.where((g) {
-      final normalizedTitle = _normalizeSearchText(g.title);
-      if (normalizedTitle.contains(normalizedQuery)) return true;
-      for (final t in queryTokens) {
-        if (normalizedTitle.contains(t)) return true;
-      }
-      return false;
-    }).toList();
-
-    validGames.sort((a, b) {
-      final scoreA = _scoreGameRelevance(a.title, normalizedQuery, queryTokens);
-      final scoreB = _scoreGameRelevance(b.title, normalizedQuery, queryTokens);
-
-      if (scoreA != scoreB) {
-        return scoreB.compareTo(scoreA);
-      }
-
-      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-    });
-
-    return validGames;
-  }
-
-  String _normalizeSearchText(String value) {
-    final lowercase = value.toLowerCase();
-    final noSpecialChars = lowercase.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
-    return noSpecialChars.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
-
-  int _scoreGameRelevance(
-    String title,
-    String normalizedQuery,
-    List<String> queryTokens,
-  ) {
-    final normalizedTitle = _normalizeSearchText(title);
-    var score = 0;
-
-    if (normalizedTitle == normalizedQuery) {
-      score += 10000;
-    }
-
-    if (normalizedTitle.startsWith(normalizedQuery)) {
-      score += 7000;
-    }
-
-    if (normalizedTitle.contains(normalizedQuery)) {
-      score += 4500;
-    }
-
-    var matchedTokens = 0;
-    for (final token in queryTokens) {
-      if (normalizedTitle.contains(token)) {
-        matchedTokens++;
-      }
-    }
-
-    if (matchedTokens == queryTokens.length) {
-      score += 3000;
-    }
-
-    score += matchedTokens * 220;
-    score -= (queryTokens.length - matchedTokens) * 600;
-
-    final lengthDiff = (normalizedTitle.length - normalizedQuery.length).abs();
-    score += (300 - (lengthDiff * 8)).clamp(0, 300);
-
-    return score;
   }
 
   /// Toont een korte snackbar met een bericht.
@@ -707,7 +628,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
         }
 
         final game = _games[index];
-        return _ScaleTap(
+        return ScaleTap(
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -736,7 +657,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           game.coverUrl!,
                           fit: BoxFit.cover,
                           semanticLabel: 'Omslagafbeelding van ${game.title}',
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             LucideIcons.gamepad2,
                             size: 34,
                             color: AppTheme.gray300,
@@ -988,37 +909,6 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
             child: const Text('Annuleren'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Scale-on-press microinteraction wrapper.
-class _ScaleTap extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onTap;
-
-  const _ScaleTap({required this.child, required this.onTap});
-
-  @override
-  State<_ScaleTap> createState() => _ScaleTapState();
-}
-
-class _ScaleTapState extends State<_ScaleTap> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.94 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: widget.child,
       ),
     );
   }

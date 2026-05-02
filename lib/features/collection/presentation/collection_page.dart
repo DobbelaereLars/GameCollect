@@ -4,10 +4,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/scale_tap.dart';
 import '../../../core/database/database_helper.dart';
 import '../domain/collection_item.dart';
 import 'collection_item_detail_page.dart';
 import 'widgets/add_platform_sheet.dart';
+import 'widgets/filter_bottom_sheet_content.dart';
 import '../../discover/presentation/widgets/discover_search_bar.dart';
 import '../../../core/preferences/view_preferences.dart';
 
@@ -40,10 +42,6 @@ class _CollectionPageState extends State<CollectionPage> {
   // Filters
   Set<String> _selectedFormats = {};
   Set<String> _selectedPlatforms = {};
-
-  // Temporary filters for the filter sheet
-  late Set<String> _tempFormats = {};
-  late Set<String> _tempPlatforms = {};
 
   List<String> get _availablePlatforms {
     final platforms = <String>{};
@@ -203,10 +201,6 @@ class _CollectionPageState extends State<CollectionPage> {
   }
 
   void _showFilterBottomSheet() {
-    // Initialiseer de tijdelijke filters met de huidige actieve waarden.
-    _tempFormats = Set.from(_selectedFormats);
-    _tempPlatforms = Set.from(_selectedPlatforms);
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -215,191 +209,23 @@ class _CollectionPageState extends State<CollectionPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final textTheme = Theme.of(context).textTheme;
-            return SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Filters',
-                          style: textTheme.titleLarge?.copyWith(
-                            color: AppTheme.black,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_selectedFormats.isNotEmpty ||
-                                _selectedPlatforms.isNotEmpty)
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedFormats.clear();
-                                    _selectedPlatforms.clear();
-                                  });
-                                  _applyFilters();
-                                  Navigator.of(context).pop();
-                                },
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.orange500,
-                                ),
-                                child: const Text('Filters wissen'),
-                              ),
-                            IconButton(
-                              icon: Icon(LucideIcons.x, color: AppTheme.black),
-                              onPressed: () => Navigator.of(context).pop(),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      'Formaat',
-                      style: textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.black,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 0,
-                      children: ['Fysiek', 'Digitaal', 'Fysiek & Digitaal'].map(
-                        (format) {
-                          final isSelected = _tempFormats.contains(format);
-                          return FilterChip(
-                            showCheckmark: false,
-                            label: Text(format),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              setSheetState(() {
-                                if (selected) {
-                                  _tempFormats.add(format);
-                                } else {
-                                  _tempFormats.remove(format);
-                                }
-                              });
-                            },
-                            selectedColor: AppTheme.orange500,
-                            checkmarkColor: AppTheme.trueWhite,
-                            labelStyle: textTheme.bodySmall?.copyWith(
-                              color: isSelected
-                                  ? AppTheme.white
-                                  : AppTheme.black,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            backgroundColor: AppTheme.white,
-                            shape: StadiumBorder(
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppTheme.orange500
-                                    : AppTheme.orange100,
-                              ),
-                            ),
-                          );
-                        },
-                      ).toList(),
-                    ),
-
-                    const SizedBox(height: 24),
-                    Text(
-                      'Platform(s)',
-                      style: textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.black,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_availablePlatforms.isEmpty)
-                      Text(
-                        'Geen platformen gevonden.',
-                        style: textTheme.bodySmall,
-                      )
-                    else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 0,
-                        children: _availablePlatforms.map((platform) {
-                          final isSelected = _tempPlatforms.contains(platform);
-                          return FilterChip(
-                            showCheckmark: false,
-                            label: Text(platform),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              setSheetState(() {
-                                if (selected) {
-                                  _tempPlatforms.add(platform);
-                                } else {
-                                  _tempPlatforms.remove(platform);
-                                }
-                              });
-                            },
-                            selectedColor: AppTheme.orange500,
-                            checkmarkColor: AppTheme.trueWhite,
-                            labelStyle: textTheme.bodySmall?.copyWith(
-                              color: isSelected
-                                  ? AppTheme.white
-                                  : AppTheme.black,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            backgroundColor: AppTheme.white,
-                            shape: StadiumBorder(
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppTheme.orange500
-                                    : AppTheme.orange100,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _selectedFormats = _tempFormats;
-                            _selectedPlatforms = _tempPlatforms;
-                          });
-                          _applyFilters();
-                          Navigator.of(context).pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.orange500,
-                          foregroundColor: AppTheme.trueWhite,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Toepassen',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => FilterBottomSheetContent(
+        availablePlatforms: _availablePlatforms,
+        initialFormats: Set.from(_selectedFormats),
+        initialPlatforms: Set.from(_selectedPlatforms),
+        hasActiveFilters:
+            _selectedFormats.isNotEmpty || _selectedPlatforms.isNotEmpty,
+        onClearFilters: () => setState(() {
+          _selectedFormats.clear();
+          _selectedPlatforms.clear();
+          _applyFilters();
+        }),
+        onApply: (formats, platforms) => setState(() {
+          _selectedFormats = formats;
+          _selectedPlatforms = platforms;
+          _applyFilters();
+        }),
+      ),
     );
   }
 
@@ -731,16 +557,10 @@ class _CollectionPageState extends State<CollectionPage> {
     required String platform,
     required String platformString,
   }) {
-    return _ScaleTap(
-      onTap: item.id == null
-          ? null
-          : () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => CollectionItemDetailPage(itemId: item.id!),
-                ),
-              );
-            },
+    return _CollectionListCard(
+      item: item,
+      specificFormat: specificFormat,
+      formatIcon: formatIcon,
       onLongPress: item.id == null
           ? null
           : () => _showItemOptions(
@@ -748,285 +568,10 @@ class _CollectionPageState extends State<CollectionPage> {
               specificPlatform: platform,
               specificPlatformWithFormat: platformString,
             ),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 16),
-        color: AppTheme.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: AppTheme.gray100),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: item.id == null
-              ? null
-              : () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          CollectionItemDetailPage(itemId: item.id!),
-                    ),
-                  );
-                },
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Cover image fills card height
-                ClipRRect(
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(16),
-                  ),
-                  child: SizedBox(
-                    width: 100,
-                    child: item.customCoverPath != null
-                        ? Image.file(
-                            File(item.customCoverPath!),
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            errorBuilder: (_, __, ___) => _buildPlaceholder(),
-                          )
-                        : (item.coverUrl != null
-                              ? Image.network(
-                                  item.coverUrl!,
-                                  fit: BoxFit.cover,
-                                  semanticLabel:
-                                      'Omslagafbeelding van ${item.title}',
-                                  errorBuilder: (_, __, ___) =>
-                                      _buildPlaceholder(),
-                                )
-                              : _buildPlaceholder()),
-                  ),
-                ),
-                // Meta data
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.black,
-                                height: 1.2,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.orange50,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                formatIcon,
-                                size: 12,
-                                color: AppTheme.orange500,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                specificFormat,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(
-                                      color: AppTheme.orange700,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (item.publisher != null &&
-                            item.publisher!.isNotEmpty)
-                          Row(
-                            children: [
-                              Icon(
-                                LucideIcons.building,
-                                size: 14,
-                                color: AppTheme.gray500,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  item.publisher!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: AppTheme.gray500,
-                                        fontSize: 12,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 8),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Semantics(
-                                label: 'Voortgang van ${item.title}',
-                                value: '${(item.progressRatio * 100).round()}%',
-                                child: LinearProgressIndicator(
-                                  value: item.progressRatio,
-                                  minHeight: 6,
-                                  borderRadius: BorderRadius.circular(999),
-                                  backgroundColor: AppTheme.progressTrack,
-                                  valueColor:
-                                      const AlwaysStoppedAnimation<Color>(
-                                        AppTheme.orange500,
-                                      ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${(item.progressRatio * 100).round()}%',
-                              style: TextStyle(
-                                fontFamily: 'Manrope',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                height: 1.4,
-                                color: AppTheme.gray500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        _buildCardTagsRow(item),
-                      ],
-                    ),
-                  ),
-                ),
-                // Action menu
-                IconButton(
-                  icon: Icon(
-                    LucideIcons.ellipsisVertical,
-                    size: 20,
-                    color: AppTheme.gray500,
-                  ),
-                  onPressed: () => _showItemOptions(
-                    item,
-                    specificPlatform: platform,
-                    specificPlatformWithFormat: platformString,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder() {
-    return Container(
-      color: AppTheme.orange50,
-      child: Center(
-        child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 34),
-      ),
-    );
-  }
-
-  Widget _buildCardTagsRow(CollectionItem item) {
-    final previewTags = item.activeTags.take(3).toList(growable: false);
-    final remainingCount = item.activeTags.length - previewTags.length;
-
-    if (previewTags.isEmpty) {
-      return InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: item.id == null
-            ? null
-            : () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => CollectionItemDetailPage(
-                      itemId: item.id!,
-                      openTagsOnStart: true,
-                    ),
-                  ),
-                );
-              },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(LucideIcons.plus, size: 14, color: AppTheme.orange500),
-              SizedBox(width: 4),
-              Text(
-                'Tags toevoegen',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  height: 1.4,
-                  color: AppTheme.orange500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 24,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            ...previewTags.map((tag) {
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.orange100),
-                  ),
-                  child: Text(
-                    tag,
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.4,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                ),
-              );
-            }),
-            if (remainingCount > 0)
-              Text(
-                '+$remainingCount meer',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  height: 1.4,
-                  color: AppTheme.orange700,
-                ),
-              ),
-          ],
-        ),
+      onOptionsPressed: () => _showItemOptions(
+        item,
+        specificPlatform: platform,
+        specificPlatformWithFormat: platformString,
       ),
     );
   }
@@ -1380,7 +925,7 @@ class _GridCoverCardState extends State<_GridCoverCard> {
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
 
-    return _ScaleTap(
+    return ScaleTap(
       onTap: () => widget.onTap(current),
       onLongPress: () => widget.onLongPress(current),
       child: GestureDetector(
@@ -1556,44 +1101,329 @@ class _GridCoverCardState extends State<_GridCoverCard> {
   }
 }
 
-/// Scale-on-press microinteraction wrapper.
-class _ScaleTap extends StatefulWidget {
-  final Widget child;
-  final VoidCallback? onTap;
+// ─────────────────────────────────────────────────────────────────────────────
+// Collectielijstkaart
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Kaartwidget voor een enkel collectie-item in de lijstweergave.
+///
+/// Toont cover, titel, formaat, uitgever, voortgangsbalk en tags.
+/// Navigatie en optiemenu-logica worden via callbacks doorgegeven vanuit
+/// [_CollectionPageState], wat zorgt voor strikte scheiding van UI en logica.
+class _CollectionListCard extends StatelessWidget {
+  const _CollectionListCard({
+    required this.item,
+    required this.specificFormat,
+    required this.formatIcon,
+    required this.onLongPress,
+    required this.onOptionsPressed,
+  });
+
+  final CollectionItem item;
+  final String specificFormat;
+  final IconData formatIcon;
   final Future<void> Function()? onLongPress;
-
-  const _ScaleTap({required this.child, this.onTap, this.onLongPress});
-
-  @override
-  State<_ScaleTap> createState() => _ScaleTapState();
-}
-
-class _ScaleTapState extends State<_ScaleTap> {
-  bool _pressed = false;
-
-  Future<void> _handleLongPress() async {
-    if (!mounted) return;
-    setState(() => _pressed = true);
-    try {
-      await widget.onLongPress?.call();
-    } finally {
-      if (mounted) setState(() => _pressed = false);
-    }
-  }
+  final VoidCallback onOptionsPressed;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress != null ? _handleLongPress : null,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.94 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: widget.child,
+    return ScaleTap(
+      onTap: item.id == null
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+              ),
+            ),
+      onLongPress: onLongPress,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        color: AppTheme.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: AppTheme.gray100),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: item.id == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+                  ),
+                ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Cover afbeelding vult kaardhoogte
+                ClipRRect(
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(16),
+                  ),
+                  child: SizedBox(
+                    width: 100,
+                    child: item.customCoverPath != null
+                        ? Image.file(
+                            File(item.customCoverPath!),
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, _, _) => _CoverPlaceholder(),
+                          )
+                        : (item.coverUrl != null
+                              ? Image.network(
+                                  item.coverUrl!,
+                                  fit: BoxFit.cover,
+                                  semanticLabel:
+                                      'Omslagafbeelding van ${item.title}',
+                                  errorBuilder: (_, _, _) =>
+                                      _CoverPlaceholder(),
+                                )
+                              : _CoverPlaceholder()),
+                  ),
+                ),
+                // Metadata kolom
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.black,
+                                height: 1.2,
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Formaat badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange50,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                formatIcon,
+                                size: 12,
+                                color: AppTheme.orange500,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                specificFormat,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: AppTheme.orange700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (item.publisher != null &&
+                            item.publisher!.isNotEmpty)
+                          Row(
+                            children: [
+                              Icon(
+                                LucideIcons.building,
+                                size: 14,
+                                color: AppTheme.gray500,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  item.publisher!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: AppTheme.gray500,
+                                        fontSize: 12,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 8),
+                        // Voortgangsbalk
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Semantics(
+                                label: 'Voortgang van ${item.title}',
+                                value: '${(item.progressRatio * 100).round()}%',
+                                child: LinearProgressIndicator(
+                                  value: item.progressRatio,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(999),
+                                  backgroundColor: AppTheme.progressTrack,
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                        AppTheme.orange500,
+                                      ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${(item.progressRatio * 100).round()}%',
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
+                                color: AppTheme.gray500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _CardTagsRow(item: item),
+                      ],
+                    ),
+                  ),
+                ),
+                // Optiemenu
+                IconButton(
+                  icon: Icon(
+                    LucideIcons.ellipsisVertical,
+                    size: 20,
+                    color: AppTheme.gray500,
+                  ),
+                  onPressed: onOptionsPressed,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Placeholder widget voor ontbrekende of mislukte cover-afbeeldingen.
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.orange50,
+      child: Center(
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.gray300, size: 34),
+      ),
+    );
+  }
+}
+
+/// Rij met tagchips voor een collectie-item. Toont maximaal drie tags en
+/// een "+N meer" indicator. Als er geen tags zijn, toont het een knop om tags
+/// toe te voegen.
+class _CardTagsRow extends StatelessWidget {
+  const _CardTagsRow({required this.item});
+
+  final CollectionItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final previewTags = item.activeTags.take(3).toList(growable: false);
+    final remainingCount = item.activeTags.length - previewTags.length;
+
+    if (previewTags.isEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: item.id == null
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CollectionItemDetailPage(
+                    itemId: item.id!,
+                    openTagsOnStart: true,
+                  ),
+                ),
+              ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.plus, size: 14, color: AppTheme.orange500),
+              SizedBox(width: 4),
+              Text(
+                'Tags toevoegen',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 24,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ...previewTags.map(
+              (tag) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.orange100),
+                  ),
+                  child: Text(
+                    tag,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (remainingCount > 0)
+              Text(
+                '+$remainingCount meer',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: AppTheme.orange700,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

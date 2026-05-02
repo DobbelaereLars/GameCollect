@@ -228,11 +228,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 value: _notificationsEnabled,
                 onChanged: (val) async {
                   if (val) {
+                    final messenger = ScaffoldMessenger.of(context);
                     final granted = await NotificationService.instance
                         .requestPermissions();
                     if (!granted) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context)
+                        messenger
                           ..clearSnackBars()
                           ..showSnackBar(
                             const SnackBar(

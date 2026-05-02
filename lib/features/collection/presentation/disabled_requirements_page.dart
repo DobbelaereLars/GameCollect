@@ -171,7 +171,7 @@ class _DisabledRequirementsPageState extends State<DisabledRequirementsPage> {
           : ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               itemCount: _requirements.length,
-              separatorBuilder: (_, __) =>
+              separatorBuilder: (_, _) =>
                   Divider(height: 1, color: AppTheme.gray100),
               itemBuilder: (context, index) {
                 final req = _requirements[index];

@@ -222,10 +222,10 @@ class _PlaytimePageState extends State<PlaytimePage> {
     });
 
     final h = hours > 0 ? '${hours}u ' : '';
-    final m = minutes > 0 ? '${minutes} min' : '';
+    final m = minutes > 0 ? '$minutes min' : '';
     messenger
       ..removeCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('${h}${m} speelduur toegevoegd.')));
+      ..showSnackBar(SnackBar(content: Text('$h$m speelduur toegevoegd.')));
   }
 
   // ─── Bottom sheet ─────────────────────────────────────────────────────────────

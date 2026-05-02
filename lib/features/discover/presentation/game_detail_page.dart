@@ -244,7 +244,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   coverUrl,
                   fit: BoxFit.cover,
                   semanticLabel: 'Omslagafbeelding van ${game.title}',
-                  errorBuilder: (_, __, ___) => Center(
+                  errorBuilder: (_, _, _) => Center(
                     child: Icon(
                       LucideIcons.gamepad2,
                       size: 64,
