@@ -39,13 +39,14 @@ class GameCollectApp extends StatelessWidget {
       child: Consumer<AppThemeController>(
         builder: (context, themeController, _) {
           return MaterialApp(
+            // Forceer een volledige herbouw (incl. Navigator-stack) zodra de
+            // effectieve helderheid wisselt. Widgets die AppTheme-static-getters
+            // gebruiken, worden zo gegarandeerd opnieuw gebuild.
+            key: ValueKey(themeController.effectiveBrightness),
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeController.mode,
-            // Forceer een volledige herbouw bij helderheidswijziging zodat
-            // widgets die AppTheme-getters direct aanroepen ook de juiste
-            // kleuren ophalen.
             home: const SplashPage(),
           );
         },
