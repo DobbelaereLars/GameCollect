@@ -45,7 +45,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -59,6 +59,7 @@ CREATE TABLE collection (
   title TEXT NOT NULL,
   coverUrl TEXT,
   customCoverPath TEXT,
+  cloudCoverUrl TEXT,
   publisher TEXT,
   format TEXT NOT NULL,
   selectedPlatforms TEXT NOT NULL,
@@ -185,6 +186,9 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       await db.execute(
         'ALTER TABLE collection ADD COLUMN startedPlayingAt TEXT',
       );
+    }
+    if (oldVersion < 12) {
+      await db.execute('ALTER TABLE collection ADD COLUMN cloudCoverUrl TEXT');
     }
     if (oldVersion < 8) {
       await db.execute(

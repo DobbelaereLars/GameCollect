@@ -170,6 +170,7 @@ class CollectionItem {
   final String title;
   final String? coverUrl;
   final String? customCoverPath;
+  final String? cloudCoverUrl;
   final String? publisher;
   final String format; // 'Fysiek', 'Digitaal', 'Allebei'
   final List<String> selectedPlatforms;
@@ -192,6 +193,7 @@ class CollectionItem {
     required this.title,
     this.coverUrl,
     this.customCoverPath,
+    this.cloudCoverUrl,
     this.publisher,
     required this.format,
     List<String>? selectedPlatforms,
@@ -228,6 +230,8 @@ class CollectionItem {
     String? coverUrl,
     String? customCoverPath,
     bool clearCustomCoverPath = false,
+    String? cloudCoverUrl,
+    bool clearCloudCoverUrl = false,
     String? publisher,
     String? format,
     List<String>? selectedPlatforms,
@@ -253,6 +257,9 @@ class CollectionItem {
       customCoverPath: clearCustomCoverPath
           ? null
           : (customCoverPath ?? this.customCoverPath),
+      cloudCoverUrl: clearCloudCoverUrl
+          ? null
+          : (cloudCoverUrl ?? this.cloudCoverUrl),
       publisher: publisher ?? this.publisher,
       format: format ?? this.format,
       selectedPlatforms: selectedPlatforms ?? this.selectedPlatforms,
@@ -304,6 +311,7 @@ class CollectionItem {
       'title': title,
       'coverUrl': coverUrl,
       'customCoverPath': customCoverPath,
+      'cloudCoverUrl': cloudCoverUrl,
       'publisher': publisher,
       'format': format,
       'selectedPlatforms': jsonEncode(selectedPlatforms),
@@ -412,6 +420,7 @@ class CollectionItem {
       title: map['title'] as String? ?? 'Onbekende game',
       coverUrl: map['coverUrl'] as String?,
       customCoverPath: map['customCoverPath'] as String?,
+      cloudCoverUrl: map['cloudCoverUrl'] as String?,
       publisher: map['publisher'] as String?,
       format: map['format'] as String? ?? 'Fysiek',
       selectedPlatforms: parseStringList(map['selectedPlatforms']),

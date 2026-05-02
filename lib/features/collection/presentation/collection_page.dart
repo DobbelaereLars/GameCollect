@@ -431,7 +431,7 @@ class _CollectionPageState extends State<CollectionPage> {
       }
       return GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
         physics: const AlwaysScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
@@ -886,6 +886,15 @@ class _GridCoverCardState extends State<_GridCoverCard> {
         ),
       );
     }
+    if (item.cloudCoverUrl != null) {
+      return SizedBox.expand(
+        child: Image.network(
+          item.cloudCoverUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _placeholder(),
+        ),
+      );
+    }
     if (item.coverUrl != null) {
       return SizedBox.expand(
         child: Image.network(
@@ -915,9 +924,8 @@ class _GridCoverCardState extends State<_GridCoverCard> {
     final platformName = current.selectedPlatforms.isNotEmpty
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
-    final bool isCompleted = widget.group.every(
-      (e) => e.isManuallyCompleted || e.progressRatio >= 1.0,
-    );
+    final bool isCompleted =
+        current.isManuallyCompleted || current.progressRatio >= 1.0;
 
     return ScaleTap(
       onTap: () => widget.onTap(current),
@@ -1190,16 +1198,23 @@ class _CollectionListCard extends StatelessWidget {
                                 gaplessPlayback: true,
                                 errorBuilder: (_, _, _) => _CoverPlaceholder(),
                               )
-                            : (item.coverUrl != null
+                            : (item.cloudCoverUrl != null
                                   ? Image.network(
-                                      item.coverUrl!,
+                                      item.cloudCoverUrl!,
                                       fit: BoxFit.cover,
-                                      semanticLabel:
-                                          'Omslagafbeelding van ${item.title}',
                                       errorBuilder: (_, _, _) =>
                                           _CoverPlaceholder(),
                                     )
-                                  : _CoverPlaceholder()),
+                                  : (item.coverUrl != null
+                                        ? Image.network(
+                                            item.coverUrl!,
+                                            fit: BoxFit.cover,
+                                            semanticLabel:
+                                                'Omslagafbeelding van ${item.title}',
+                                            errorBuilder: (_, _, _) =>
+                                                _CoverPlaceholder(),
+                                          )
+                                        : _CoverPlaceholder())),
                         if (item.isManuallyCompleted ||
                             item.progressRatio >= 1.0)
                           Positioned(

@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -234,9 +237,14 @@ class SyncService extends ChangeNotifier {
         .where('updatedAt', isGreaterThan: sinceMs)
         .get();
     for (final doc in collectionSnap.docs) {
-      await DatabaseHelper.instance.applyRemoteCollectionRow(
-        Map<String, dynamic>.from(doc.data()),
-      );
+      final row = Map<String, dynamic>.from(doc.data());
+      await DatabaseHelper.instance.applyRemoteCollectionRow(row);
+      // Als er een cloud-cover URL is, download dan lokaal zodat de UI
+      // geen netwerkverzoek nodig heeft voor elke weergave.
+      final cloudUrl = row['cloudCoverUrl'] as String?;
+      if (cloudUrl != null && cloudUrl.isNotEmpty) {
+        await _downloadCoverIfAbsent(cloudUrl, uid, row['syncId'] as String?);
+      }
     }
 
     final achievementsSnap = await userDoc
@@ -428,10 +436,41 @@ class SyncService extends ChangeNotifier {
     return achievements.isNotEmpty;
   }
 
-  /// Verwijdert het lokale auto-increment ID zodat Firestore een eigen ID behoudt.
+  /// Downloadt een cover-afbeelding van [cloudUrl] naar lokale opslag als die
+  /// nog niet aanwezig is, en werkt de DB-rij bij met het lokale pad.
+  Future<void> _downloadCoverIfAbsent(
+    String cloudUrl,
+    String uid,
+    String? syncId,
+  ) async {
+    try {
+      if (syncId == null) return;
+      final dir = await getApplicationDocumentsDirectory();
+      final localPath = '${dir.path}/covers/$syncId.jpg';
+      final file = File(localPath);
+      if (await file.exists()) return; // al aanwezig
+      await file.parent.create(recursive: true);
+      final response = await http.get(Uri.parse(cloudUrl));
+      if (response.statusCode == 200) {
+        await file.writeAsBytes(response.bodyBytes);
+        // Werk het lokale pad bij in de DB via een directe update.
+        final db = await DatabaseHelper.instance.database;
+        await db.rawUpdate(
+          'UPDATE collection SET customCoverPath = ? WHERE syncId = ?',
+          [localPath, syncId],
+        );
+      }
+    } catch (_) {
+      // Niet fataal: app werkt gewoon met de cloud URL als fallback.
+    }
+  }
+
+  /// Verwijdert het lokale auto-increment ID en het lokale bestandspad zodat
+  /// Firestore alleen overdraagbare data ontvangt.
   Map<String, dynamic> _stripLocalIds(Map<String, dynamic> row) {
     final out = Map<String, dynamic>.from(row);
     out.remove('id'); // lokale auto-increment, wordt niet gesynchroniseerd
+    out.remove('customCoverPath'); // lokaal bestandspad, niet over te dragen
     return out;
   }
 

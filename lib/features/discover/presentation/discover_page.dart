@@ -641,7 +641,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             );
           },
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: Stack(
               fit: StackFit.expand,
               children: [

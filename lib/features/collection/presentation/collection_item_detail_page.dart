@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:confetti/confetti.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -11,6 +13,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/sync/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 import '../../achievements/data/app_achievement_service.dart';
@@ -62,6 +65,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   List<CustomRequirement> _displayRequirements = [];
   Timer? _requirementSortTimer;
 
+  // Confetti bij 100% voltooiing
+  late final ConfettiController _confettiController;
+
   InputDecoration _orangeInputDecoration({
     String? hintText,
     String? labelText,
@@ -91,14 +97,22 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
     _loadItem();
   }
 
   @override
   void dispose() {
+    _confettiController.dispose();
     _sortTimer?.cancel();
     _requirementSortTimer?.cancel();
     super.dispose();
+  }
+
+  void _playConfetti() {
+    _confettiController.play();
   }
 
   /// Laadt het collectie-item en bijbehorende achievements uit de database.
@@ -652,10 +666,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   Future<void> _toggleRequirementCompleted(String id, bool value) async {
     final item = _item;
     if (item == null) return;
+    final previousRatio = item.progressRatio;
     final updated = item.requirements
         .map((r) => r.id == id ? r.copyWith(isCompleted: value) : r)
         .toList(growable: false);
     await _persistItem(item.copyWith(requirements: updated));
+    if (previousRatio < 1.0 && (_item?.progressRatio ?? 0) >= 1.0) {
+      _playConfetti();
+    }
     if (!mounted) return;
     setState(() {
       _requirements = _requirements
@@ -706,6 +724,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   Future<void> _toggleAchievementCompleted(int rawgId, bool value) async {
     final item = _item;
     if (item == null) return;
+    final previousRatio = item.progressRatio;
 
     final baseStates = item.achievementStates.isNotEmpty
         ? item.achievementStates
@@ -724,6 +743,9 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         .toList(growable: false);
 
     await _persistItem(item.copyWith(achievementStates: updatedStates));
+    if (previousRatio < 1.0 && (_item?.progressRatio ?? 0) >= 1.0) {
+      _playConfetti();
+    }
     if (!mounted) return;
     // Werk de voltooiingsstatus onmiddellijk bij — sortering volgt na de vertraging.
     setState(() {
@@ -1333,6 +1355,27 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               ),
             ),
           ),
+
+          // Confetti-overlay bij 100% voltooiing
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              numberOfParticles: 30,
+              gravity: 0.3,
+              emissionFrequency: 0.05,
+              maxBlastForce: 20,
+              minBlastForce: 8,
+              colors: [
+                AppTheme.orange500,
+                AppTheme.orange400,
+                AppTheme.orange300,
+                AppTheme.orange200,
+                AppTheme.trueWhite,
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1603,18 +1646,24 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
+  late String? _cloudCoverUrl;
   String _currentPlatformWithFormat = '';
   bool _hasMultiplePlatforms = false;
   List<String> _availablePlatforms = [];
   Set<String> _alreadyAddedPlatformNames = {};
   bool _isRefreshing = false;
+  late final ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
     _isManuallyCompleted = widget.item.isManuallyCompleted;
     _customCoverPath = widget.item.customCoverPath;
+    _cloudCoverUrl = widget.item.cloudCoverUrl;
     _currentPlatformWithFormat = widget.platformWithFormat;
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
     _loadPlatformCount();
   }
 
@@ -1652,6 +1701,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
   static String _platformNameFrom(String platformWithFormat) {
     if (platformWithFormat.isEmpty) return '';
     final match = RegExp(
@@ -1664,6 +1719,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     isManuallyCompleted: _isManuallyCompleted,
     customCoverPath: _customCoverPath,
     clearCustomCoverPath: _customCoverPath == null,
+    cloudCoverUrl: _cloudCoverUrl,
+    clearCloudCoverUrl: _cloudCoverUrl == null,
   );
 
   Future<void> _save() async {
@@ -1679,14 +1736,55 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
       imageQuality: 85,
     );
     if (picked == null) return;
-    setState(() => _customCoverPath = picked.path);
+    setState(() {
+      _customCoverPath = picked.path;
+    });
+    // Sla lokaal op zodat de UI direct reageert.
     await _save();
+    // Upload naar Firebase Storage op de achtergrond.
+    try {
+      final uid = _currentUid();
+      if (uid != null) {
+        final itemId = widget.item.id;
+        if (itemId == null) return;
+        final ref = FirebaseStorage.instance.ref().child(
+          'users/$uid/covers/$itemId.jpg',
+        );
+        await ref.putFile(
+          File(picked.path),
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        final url = await ref.getDownloadURL();
+        if (mounted) setState(() => _cloudCoverUrl = url);
+        await _save();
+      }
+    } catch (_) {
+      // Upload mislukt — lokale afbeelding blijft, cloud sync later.
+    }
   }
 
   Future<void> _removeCover() async {
-    setState(() => _customCoverPath = null);
+    // Verwijder uit Firebase Storage als er een cloud-URL is.
+    final uid = _currentUid();
+    if (uid != null && _cloudCoverUrl != null) {
+      try {
+        final itemId = widget.item.id;
+        if (itemId != null) {
+          await FirebaseStorage.instance
+              .ref()
+              .child('users/$uid/covers/$itemId.jpg')
+              .delete();
+        }
+      } catch (_) {}
+    }
+    setState(() {
+      _customCoverPath = null;
+      _cloudCoverUrl = null;
+    });
     await _save();
   }
+
+  String? _currentUid() => AuthService.instance.uid;
 
   Future<void> _showRestoreCoverSheet() async {
     await showModalBottomSheet<void>(
@@ -1766,6 +1864,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   Future<void> _toggleCompleted(bool value) async {
     setState(() => _isManuallyCompleted = value);
+    if (value) _confettiController.play();
     await _save();
   }
 
@@ -1922,56 +2021,79 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.white,
-      appBar: AppBar(
-        backgroundColor: AppTheme.white,
-        foregroundColor: AppTheme.black,
-        surfaceTintColor: AppTheme.white,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Instellingen',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: AppTheme.black,
-            fontWeight: FontWeight.w700,
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppTheme.white,
+          appBar: AppBar(
+            backgroundColor: AppTheme.white,
+            foregroundColor: AppTheme.black,
+            surfaceTintColor: AppTheme.white,
+            leading: IconButton(
+              icon: const Icon(LucideIcons.chevronLeft),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Text(
+              'Instellingen',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: AppTheme.black,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          body: SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCoverSection(),
+                  const SizedBox(height: 24),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildCompletedRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildFormatRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  if (_availablePlatforms
+                      .where((p) => !_alreadyAddedPlatformNames.contains(p))
+                      .isNotEmpty) ...[
+                    _buildAddPlatformRow(),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  ],
+                  _buildRefreshDataRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildDeleteFromPlatformRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  if (_hasMultiplePlatforms) ...[
+                    _buildDeleteFromAllRow(),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildCoverSection(),
-              const SizedBox(height: 24),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildCompletedRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildFormatRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              if (_availablePlatforms
-                  .where((p) => !_alreadyAddedPlatformNames.contains(p))
-                  .isNotEmpty) ...[
-                _buildAddPlatformRow(),
-                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              ],
-              _buildRefreshDataRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildDeleteFromPlatformRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              if (_hasMultiplePlatforms) ...[
-                _buildDeleteFromAllRow(),
-                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              ],
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 30,
+            gravity: 0.3,
+            emissionFrequency: 0.05,
+            maxBlastForce: 20,
+            minBlastForce: 8,
+            colors: [
+              AppTheme.orange500,
+              AppTheme.orange400,
+              AppTheme.orange300,
+              AppTheme.orange200,
+              AppTheme.trueWhite,
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -2022,6 +2144,18 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
                 ),
               ),
             ],
+          ),
+        ),
+      );
+    } else if (_cloudCoverUrl != null) {
+      coverWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.network(
+            _cloudCoverUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => _buildCoverFallback(),
           ),
         ),
       );
@@ -2624,14 +2758,21 @@ class _GameDetailHeader extends StatelessWidget {
                         gaplessPlayback: true,
                         errorBuilder: (_, _, _) => const _CoverPlaceholder(),
                       )
-                    : (item.coverUrl != null
+                    : (item.cloudCoverUrl != null
                           ? Image.network(
-                              item.coverUrl!,
+                              item.cloudCoverUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) =>
                                   const _CoverPlaceholder(),
                             )
-                          : const _CoverPlaceholder()),
+                          : (item.coverUrl != null
+                                ? Image.network(
+                                    item.coverUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) =>
+                                        const _CoverPlaceholder(),
+                                  )
+                                : const _CoverPlaceholder())),
                 Positioned(
                   top: 12,
                   left: 12,

@@ -843,6 +843,21 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
         ),
       );
     }
+    if (item.cloudCoverUrl != null) {
+      return SizedBox.expand(
+        child: Image.network(
+          item.cloudCoverUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Center(
+            child: Icon(
+              LucideIcons.gamepad2,
+              size: 32,
+              color: AppTheme.gray300,
+            ),
+          ),
+        ),
+      );
+    }
     if (item.coverUrl != null) {
       return SizedBox.expand(
         child: Image.network(
@@ -872,9 +887,8 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     final platformName = current.selectedPlatforms.isNotEmpty
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
-    final bool isCompleted = widget.group.allItems.every(
-      (e) => e.isManuallyCompleted || e.progressRatio >= 1.0,
-    );
+    final bool isCompleted =
+        current.isManuallyCompleted || current.progressRatio >= 1.0;
 
     return GestureDetector(
       onTap: () => widget.onTap(current),
