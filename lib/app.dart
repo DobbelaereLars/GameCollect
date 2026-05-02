@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_theme_controller.dart';
-import 'features/navigation/presentation/game_collect_shell.dart';
+import 'features/splash/presentation/splash_page.dart';
 
 /// Root-widget van de GameCollect-app.
 /// Luistert op [AppThemeController] en past het thema dynamisch aan.
@@ -15,7 +15,6 @@ class GameCollectApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: AppThemeController.instance,
       builder: (context, _) {
-        final brightness = AppThemeController.instance.effectiveBrightness;
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
@@ -24,7 +23,7 @@ class GameCollectApp extends StatelessWidget {
           // Forceer een volledige herbouw bij helderheidswijziging zodat widgets
           // die AppTheme-getters direct aanroepen (zonder InheritedWidget)
           // ook direct de juiste kleuren ophalen.
-          home: GameCollectShell(key: ValueKey(brightness)),
+          home: const SplashPage(),
         );
       },
     );

@@ -1418,13 +1418,17 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         Row(
           children: [
             Expanded(
-              child: LinearProgressIndicator(
-                value: item.progressRatio,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor: AppTheme.progressTrack,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppTheme.orange500,
+              child: Semantics(
+                label: 'Voortgang',
+                value: '${(item.progressRatio * 100).round()}%',
+                child: LinearProgressIndicator(
+                  value: item.progressRatio,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(999),
+                  backgroundColor: AppTheme.progressTrack,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppTheme.orange500,
+                  ),
                 ),
               ),
             ),

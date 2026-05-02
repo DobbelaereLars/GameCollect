@@ -41,6 +41,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   final RawgGamesApi _rawgGamesApi = const RawgGamesApi();
 
   bool _isLoading = true;
+  bool _contentVisible = false;
   String? _errorMessage;
   RawgGameDetails? _gameDetails;
   Timer? _slowConnectionTimer;
@@ -112,6 +113,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
       setState(() {
         _gameDetails = details;
         _isLoading = false;
+        _contentVisible = true;
       });
     } catch (error) {
       if (!mounted) return;
@@ -159,7 +161,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   }
 
   Widget _buildBody(TextTheme textTheme, String? coverUrl) {
-    if (_isLoading) {
+    if (_isLoading && _gameDetails == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -223,230 +225,246 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
     final game = _gameDetails!;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Cover Image View
-          if (coverUrl != null)
-            Container(
-              height: 300,
-              width: double.infinity,
-              color: AppTheme.orange50,
-              child: Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Center(
-                  child: Icon(
-                    LucideIcons.gamepad2,
-                    size: 64,
-                    color: AppTheme.gray500,
+    return AnimatedOpacity(
+      opacity: _contentVisible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Cover Image View
+            if (coverUrl != null)
+              Container(
+                height: MediaQuery.of(context).size.height * 0.30,
+                width: double.infinity,
+                color: AppTheme.orange50,
+                child: Image.network(
+                  coverUrl,
+                  fit: BoxFit.cover,
+                  semanticLabel: 'Omslagafbeelding van ${game.title}',
+                  errorBuilder: (_, __, ___) => Center(
+                    child: Icon(
+                      LucideIcons.gamepad2,
+                      size: 64,
+                      color: AppTheme.gray500,
+                    ),
                   ),
                 ),
               ),
-            ),
 
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  game.title,
-                  style: textTheme.displayLarge?.copyWith(
-                    color: AppTheme.black,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                if (game.released != null || game.rating != null) ...[
-                  Row(
-                    children: [
-                      if (game.released != null) ...[
-                        Icon(
-                          LucideIcons.calendar,
-                          size: 16,
-                          color: AppTheme.gray700,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          game.released!,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.gray700,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      if (game.released != null && game.rating != null)
-                        const SizedBox(width: 16),
-                      if (game.rating != null && game.rating! > 0) ...[
-                        Icon(
-                          LucideIcons.star,
-                          size: 16,
-                          color: AppTheme.orange500,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          game.rating!.toStringAsFixed(1),
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.orange500,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                ],
-                // Knop om het spel toe te voegen aan of te bekijken in de collectie.
-                Builder(
-                  builder: (context) {
-                    final released = game.released;
-                    final isNotYetReleased =
-                        released != null &&
-                        DateTime.tryParse(released) != null &&
-                        DateTime.parse(released).isAfter(DateTime.now());
-                    return SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: isNotYetReleased
-                            ? null
-                            : _isAlreadyInCollection
-                            ? () {
-                                CollectionPage.searchRequest.value = game.title;
-                              }
-                            : () async {
-                                await AddToCollectionSheet.show(context, game);
-                                _checkIfInCollection();
-                              },
-                        icon: Icon(
-                          isNotYetReleased
-                              ? LucideIcons.clock
-                              : _isAlreadyInCollection
-                              ? LucideIcons.library
-                              : LucideIcons.plus,
-                          size: 20,
-                        ),
-                        label: Text(
-                          isNotYetReleased
-                              ? 'Nog niet uitgebracht'
-                              : _isAlreadyInCollection
-                              ? 'Bekijk in collectie'
-                              : 'Toevoegen aan collectie',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        style: ButtonStyle(
-                          backgroundColor: WidgetStateProperty.resolveWith((
-                            states,
-                          ) {
-                            if (states.contains(WidgetState.disabled)) {
-                              return AppTheme.orange100;
-                            }
-                            return _isAlreadyInCollection
-                                ? AppTheme.orange500
-                                : AppTheme.white;
-                          }),
-                          foregroundColor: WidgetStateProperty.resolveWith((
-                            states,
-                          ) {
-                            if (states.contains(WidgetState.disabled)) {
-                              return AppTheme.white;
-                            }
-                            return _isAlreadyInCollection
-                                ? AppTheme.white
-                                : AppTheme.orange500;
-                          }),
-                          padding: WidgetStateProperty.all(
-                            const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          elevation: WidgetStateProperty.all(0),
-                          shape: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.disabled)) {
-                              return RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              );
-                            }
-                            return RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: const BorderSide(
-                                color: AppTheme.orange500,
-                                width: 2,
-                              ),
-                            );
-                          }),
-                          overlayColor: WidgetStateProperty.all(
-                            Colors.transparent,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                // Platform tags
-                if (game.platforms.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Platforms',
-                    style: textTheme.titleLarge?.copyWith(
+                    game.title,
+                    style: textTheme.displayLarge?.copyWith(
                       color: AppTheme.black,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: game.platforms.map((platform) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.orange50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.orange100),
-                        ),
-                        child: Text(
-                          platform,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: AppTheme.orange700,
-                            fontWeight: FontWeight.w600,
+                  const SizedBox(height: 12),
+
+                  if (game.released != null || game.rating != null) ...[
+                    Row(
+                      children: [
+                        if (game.released != null) ...[
+                          Icon(
+                            LucideIcons.calendar,
+                            size: 16,
+                            color: AppTheme.gray700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            game.released!,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.gray700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (game.released != null && game.rating != null)
+                          const SizedBox(width: 16),
+                        if (game.rating != null && game.rating! > 0) ...[
+                          Icon(
+                            LucideIcons.star,
+                            size: 16,
+                            color: AppTheme.orange500,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            game.rating!.toStringAsFixed(1),
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.orange500,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  // Knop om het spel toe te voegen aan of te bekijken in de collectie.
+                  Builder(
+                    builder: (context) {
+                      final released = game.released;
+                      final isNotYetReleased =
+                          released != null &&
+                          DateTime.tryParse(released) != null &&
+                          DateTime.parse(released).isAfter(DateTime.now());
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: isNotYetReleased
+                              ? null
+                              : _isAlreadyInCollection
+                              ? () {
+                                  CollectionPage.searchRequest.value =
+                                      game.title;
+                                }
+                              : () async {
+                                  await AddToCollectionSheet.show(
+                                    context,
+                                    game,
+                                  );
+                                  _checkIfInCollection();
+                                },
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            transitionBuilder: (child, animation) =>
+                                ScaleTransition(scale: animation, child: child),
+                            child: Icon(
+                              isNotYetReleased
+                                  ? LucideIcons.clock
+                                  : _isAlreadyInCollection
+                                  ? LucideIcons.library
+                                  : LucideIcons.plus,
+                              size: 20,
+                              key: ValueKey(_isAlreadyInCollection),
+                            ),
+                          ),
+                          label: Text(
+                            isNotYetReleased
+                                ? 'Nog niet uitgebracht'
+                                : _isAlreadyInCollection
+                                ? 'Bekijk in collectie'
+                                : 'Toevoegen aan collectie',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.disabled)) {
+                                return AppTheme.orange100;
+                              }
+                              return _isAlreadyInCollection
+                                  ? AppTheme.orange500
+                                  : AppTheme.white;
+                            }),
+                            foregroundColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.disabled)) {
+                                return AppTheme.white;
+                              }
+                              return _isAlreadyInCollection
+                                  ? AppTheme.white
+                                  : AppTheme.orange500;
+                            }),
+                            padding: WidgetStateProperty.all(
+                              const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            elevation: WidgetStateProperty.all(0),
+                            shape: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.disabled)) {
+                                return RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                );
+                              }
+                              return RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(
+                                  color: AppTheme.orange500,
+                                  width: 2,
+                                ),
+                              );
+                            }),
+                            overlayColor: WidgetStateProperty.all(
+                              Colors.transparent,
+                            ),
                           ),
                         ),
                       );
-                    }).toList(),
+                    },
                   ),
                   const SizedBox(height: 24),
-                ],
-
-                // Description
-                if (game.description.isNotEmpty) ...[
-                  Text(
-                    'Over de game',
-                    style: textTheme.titleLarge?.copyWith(
-                      color: AppTheme.black,
+                  // Platform tags
+                  if (game.platforms.isNotEmpty) ...[
+                    Text(
+                      'Platforms',
+                      style: textTheme.titleLarge?.copyWith(
+                        color: AppTheme.black,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    game.description,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.gray700,
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: game.platforms.map((platform) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.orange100),
+                          ),
+                          child: Text(
+                            platform,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppTheme.orange700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Description
+                  if (game.description.isNotEmpty) ...[
+                    Text(
+                      'Over de game',
+                      style: textTheme.titleLarge?.copyWith(
+                        color: AppTheme.black,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      game.description,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.gray700,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Metadata list
+                  _buildMetadataList(textTheme, game),
+
+                  // Extra padding onderaan zodat de content niet achter de (floating) bottom navigation bar valt
+                  const SizedBox(height: 80),
                 ],
-
-                // Metadata list
-                _buildMetadataList(textTheme, game),
-
-                // Extra padding onderaan zodat de content niet achter de (floating) bottom navigation bar valt
-                const SizedBox(height: 80),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

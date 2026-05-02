@@ -620,6 +620,7 @@ class _CollectionPageState extends State<CollectionPage> {
       return GridView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
+        physics: const AlwaysScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           crossAxisSpacing: 8,
@@ -639,6 +640,19 @@ class _CollectionPageState extends State<CollectionPage> {
                   ),
                 );
               }
+            },
+            onLongPress: (item) async {
+              final platformWithFormat = item.selectedPlatforms.isNotEmpty
+                  ? item.selectedPlatforms.first
+                  : '';
+              final platform = platformWithFormat
+                  .replaceAll(RegExp(r'\s*\([^)]*\)$'), '')
+                  .trim();
+              await _showItemOptions(
+                item,
+                specificPlatform: platform,
+                specificPlatformWithFormat: platformWithFormat,
+              );
             },
           );
         },
@@ -717,180 +731,206 @@ class _CollectionPageState extends State<CollectionPage> {
     required String platform,
     required String platformString,
   }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      color: AppTheme.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppTheme.gray100),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: item.id == null
-            ? null
-            : () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+    return _ScaleTap(
+      onTap: item.id == null
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CollectionItemDetailPage(itemId: item.id!),
+                ),
+              );
+            },
+      onLongPress: item.id == null
+          ? null
+          : () => _showItemOptions(
+              item,
+              specificPlatform: platform,
+              specificPlatformWithFormat: platformString,
+            ),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        color: AppTheme.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: AppTheme.gray100),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: item.id == null
+              ? null
+              : () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          CollectionItemDetailPage(itemId: item.id!),
+                    ),
+                  );
+                },
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Cover image fills card height
+                ClipRRect(
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(16),
                   ),
-                );
-              },
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Cover image fills card height
-              ClipRRect(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(16),
+                  child: SizedBox(
+                    width: 100,
+                    child: item.customCoverPath != null
+                        ? Image.file(
+                            File(item.customCoverPath!),
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                          )
+                        : (item.coverUrl != null
+                              ? Image.network(
+                                  item.coverUrl!,
+                                  fit: BoxFit.cover,
+                                  semanticLabel:
+                                      'Omslagafbeelding van ${item.title}',
+                                  errorBuilder: (_, __, ___) =>
+                                      _buildPlaceholder(),
+                                )
+                              : _buildPlaceholder()),
+                  ),
                 ),
-                child: SizedBox(
-                  width: 100,
-                  child: item.customCoverPath != null
-                      ? Image.file(
-                          File(item.customCoverPath!),
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                          errorBuilder: (_, __, ___) => _buildPlaceholder(),
-                        )
-                      : (item.coverUrl != null
-                            ? Image.network(
-                                item.coverUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    _buildPlaceholder(),
-                              )
-                            : _buildPlaceholder()),
-                ),
-              ),
-              // Meta data
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.black,
-                              height: 1.2,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                // Meta data
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.black,
+                                height: 1.2,
+                              ),
                         ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.orange50,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              formatIcon,
-                              size: 12,
-                              color: AppTheme.orange500,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              specificFormat,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: AppTheme.orange700,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (item.publisher != null && item.publisher!.isNotEmpty)
-                        Row(
-                          children: [
-                            Icon(
-                              LucideIcons.building,
-                              size: 14,
-                              color: AppTheme.gray500,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                item.publisher!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange50,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                formatIcon,
+                                size: 12,
+                                color: AppTheme.orange500,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                specificFormat,
+                                style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(
-                                      color: AppTheme.gray500,
-                                      fontSize: 12,
+                                      color: AppTheme.orange700,
+                                      fontWeight: FontWeight.w600,
                                     ),
                               ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (item.publisher != null &&
+                            item.publisher!.isNotEmpty)
+                          Row(
+                            children: [
+                              Icon(
+                                LucideIcons.building,
+                                size: 14,
+                                color: AppTheme.gray500,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  item.publisher!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: AppTheme.gray500,
+                                        fontSize: 12,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Semantics(
+                                label: 'Voortgang van ${item.title}',
+                                value: '${(item.progressRatio * 100).round()}%',
+                                child: LinearProgressIndicator(
+                                  value: item.progressRatio,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(999),
+                                  backgroundColor: AppTheme.progressTrack,
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                        AppTheme.orange500,
+                                      ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${(item.progressRatio * 100).round()}%',
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
+                                color: AppTheme.gray500,
+                              ),
                             ),
                           ],
                         ),
-                      const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: LinearProgressIndicator(
-                              value: item.progressRatio,
-                              minHeight: 6,
-                              borderRadius: BorderRadius.circular(999),
-                              backgroundColor: AppTheme.progressTrack,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                AppTheme.orange500,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${(item.progressRatio * 100).round()}%',
-                            style: TextStyle(
-                              fontFamily: 'Manrope',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              height: 1.4,
-                              color: AppTheme.gray500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildCardTagsRow(item),
-                    ],
+                        const SizedBox(height: 8),
+                        _buildCardTagsRow(item),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              // Action menu
-              IconButton(
-                icon: Icon(
-                  LucideIcons.ellipsisVertical,
-                  size: 20,
-                  color: AppTheme.gray500,
+                // Action menu
+                IconButton(
+                  icon: Icon(
+                    LucideIcons.ellipsisVertical,
+                    size: 20,
+                    color: AppTheme.gray500,
+                  ),
+                  onPressed: () => _showItemOptions(
+                    item,
+                    specificPlatform: platform,
+                    specificPlatformWithFormat: platformString,
+                  ),
                 ),
-                onPressed: () => _showItemOptions(
-                  item,
-                  specificPlatform: platform,
-                  specificPlatformWithFormat: platformString,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Bouwt een placeholder als er geen omslagafbeelding beschikbaar is.
   Widget _buildPlaceholder() {
     return Container(
       color: AppTheme.orange50,
@@ -1238,10 +1278,15 @@ class _CollectionPageState extends State<CollectionPage> {
 // ── Grid cover card with platform cycling ─────────────────────────────────────
 
 class _GridCoverCard extends StatefulWidget {
-  const _GridCoverCard({required this.group, required this.onTap});
+  const _GridCoverCard({
+    required this.group,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final List<CollectionItem> group;
   final void Function(CollectionItem item) onTap;
+  final Future<void> Function(CollectionItem item) onLongPress;
 
   @override
   State<_GridCoverCard> createState() => _GridCoverCardState();
@@ -1335,156 +1380,220 @@ class _GridCoverCardState extends State<_GridCoverCard> {
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
 
-    return GestureDetector(
+    return _ScaleTap(
       onTap: () => widget.onTap(current),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Cover image with swipe animation on platform switch
-            Positioned.fill(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 320),
-                transitionBuilder: (child, animation) {
-                  final dir = _forward ? 1.0 : -1.0;
-                  final isIncoming = child.key == ValueKey(_selectedIndex);
-                  final curved = CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeInOut,
-                  );
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: isIncoming ? Offset(dir, 0.0) : Offset(-dir, 0.0),
-                      end: Offset.zero,
-                    ).animate(curved),
-                    child: child,
-                  );
-                },
-                child: Container(
-                  key: ValueKey(_selectedIndex),
-                  color: AppTheme.orange50,
-                  child: _coverWidget(current),
+      onLongPress: () => widget.onLongPress(current),
+      child: GestureDetector(
+        onTap: () => widget.onTap(current),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Cover image with swipe animation on platform switch
+              Positioned.fill(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 320),
+                  transitionBuilder: (child, animation) {
+                    final dir = _forward ? 1.0 : -1.0;
+                    final isIncoming = child.key == ValueKey(_selectedIndex);
+                    final curved = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeInOut,
+                    );
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: isIncoming
+                            ? Offset(dir, 0.0)
+                            : Offset(-dir, 0.0),
+                        end: Offset.zero,
+                      ).animate(curved),
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    key: ValueKey(_selectedIndex),
+                    color: AppTheme.orange50,
+                    child: _coverWidget(current),
+                  ),
                 ),
               ),
-            ),
 
-            // Top-left platform badge (same style as overview _CoverBadge)
-            if (platformName != null)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.orange50,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+              // Top-left platform badge (same style as overview _CoverBadge)
+              if (platformName != null)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  right: 8,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        LucideIcons.gamepad2,
-                        size: 11,
-                        color: AppTheme.orange500,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        platformName.isNotEmpty ? platformName : '?',
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.orange700,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // Bottom gradient + game title + dot indicators
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(8, 28, 8, 8),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppTheme.blackTransparent0,
-                      AppTheme.blackTransparent80,
-                    ],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      current.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppTheme.trueWhite,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                    ),
-                    if (hasMultiple) ...[
-                      const SizedBox(height: 6),
-                      Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(widget.group.length, (i) {
-                            final isActive = i == _selectedIndex;
-                            return GestureDetector(
-                              onTap: () {
-                                _cycleTimer?.cancel();
-                                setState(() {
-                                  _forward = i > _selectedIndex;
-                                  _selectedIndex = i;
-                                });
-                                Future.delayed(const Duration(seconds: 4), () {
-                                  if (mounted) _startCycleIfNeeded();
-                                });
-                              },
-                              behavior: HitTestBehavior.opaque,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 3,
-                                ),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: isActive ? 16 : 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: isActive
-                                        ? AppTheme.orange500
-                                        : AppTheme.orange200,
-                                    borderRadius: BorderRadius.circular(3),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.orange50,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                LucideIcons.gamepad2,
+                                size: 11,
+                                color: AppTheme.orange500,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  platformName.isNotEmpty ? platformName : '?',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.orange700,
+                                    height: 1.4,
                                   ),
                                 ),
                               ),
-                            );
-                          }),
+                            ],
+                          ),
                         ),
                       ),
                     ],
-                  ],
+                  ),
+                ),
+
+              // Bottom gradient + game title + dot indicators
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 28, 8, 8),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        AppTheme.blackTransparent0,
+                        AppTheme.blackTransparent80,
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        current.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppTheme.trueWhite,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                        ),
+                      ),
+                      if (hasMultiple) ...[
+                        const SizedBox(height: 6),
+                        Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: List.generate(widget.group.length, (i) {
+                              final isActive = i == _selectedIndex;
+                              return GestureDetector(
+                                onTap: () {
+                                  _cycleTimer?.cancel();
+                                  setState(() {
+                                    _forward = i > _selectedIndex;
+                                    _selectedIndex = i;
+                                  });
+                                  Future.delayed(
+                                    const Duration(seconds: 4),
+                                    () {
+                                      if (mounted) _startCycleIfNeeded();
+                                    },
+                                  );
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: isActive ? 16 : 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: isActive
+                                          ? AppTheme.orange500
+                                          : AppTheme.orange200,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Scale-on-press microinteraction wrapper.
+class _ScaleTap extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final Future<void> Function()? onLongPress;
+
+  const _ScaleTap({required this.child, this.onTap, this.onLongPress});
+
+  @override
+  State<_ScaleTap> createState() => _ScaleTapState();
+}
+
+class _ScaleTapState extends State<_ScaleTap> {
+  bool _pressed = false;
+
+  Future<void> _handleLongPress() async {
+    if (!mounted) return;
+    setState(() => _pressed = true);
+    try {
+      await widget.onLongPress?.call();
+    } finally {
+      if (mounted) setState(() => _pressed = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress != null ? _handleLongPress : null,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: widget.child,
       ),
     );
   }

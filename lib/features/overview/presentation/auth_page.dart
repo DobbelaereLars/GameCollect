@@ -21,8 +21,10 @@ class AuthPage extends StatefulWidget {
 
 class _AuthPageState extends State<AuthPage> {
   late AuthMode _mode = widget.initialMode;
+  final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _passwordFocusNode = FocusNode();
 
   // Indicator: wordt geactiveerd tijdens het versturen van het formulier.
   bool _isSubmitting = false;
@@ -35,21 +37,15 @@ class _AuthPageState extends State<AuthPage> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
   /// Valideert het formulier en roept de juiste Firebase-authenticatiemethode aan.
   Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Vul je e-mailadres en wachtwoord in.');
-      return;
-    }
-    if (password.length < 6) {
-      setState(() => _error = 'Wachtwoord moet minstens 6 tekens bevatten.');
-      return;
-    }
 
     setState(() {
       _isSubmitting = true;
@@ -161,26 +157,57 @@ class _AuthPageState extends State<AuthPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              _buildField(
-                controller: _emailCtrl,
-                hint: 'E-mailadres',
-                icon: LucideIcons.mail,
-                keyboard: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              _buildField(
-                controller: _passwordCtrl,
-                hint: 'Wachtwoord',
-                icon: LucideIcons.lock,
-                obscure: _obscure,
-                suffix: IconButton(
-                  splashRadius: 18,
-                  icon: Icon(
-                    _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-                    size: 18,
-                    color: AppTheme.gray500,
-                  ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _buildField(
+                      controller: _emailCtrl,
+                      hint: 'E-mailadres',
+                      icon: LucideIcons.mail,
+                      keyboard: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_passwordFocusNode),
+                      validator: (v) {
+                        final val = v?.trim() ?? '';
+                        if (val.isEmpty) return 'Vul je e-mailadres in.';
+                        final emailRegex = RegExp(
+                          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                        );
+                        if (!emailRegex.hasMatch(val))
+                          return 'Ongeldig e-mailadres.';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildField(
+                      controller: _passwordCtrl,
+                      hint: 'Wachtwoord',
+                      icon: LucideIcons.lock,
+                      obscure: _obscure,
+                      focusNode: _passwordFocusNode,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      validator: (v) {
+                        final val = v ?? '';
+                        if (val.isEmpty) return 'Vul je wachtwoord in.';
+                        if (val.length < 6)
+                          return 'Wachtwoord moet minstens 6 tekens bevatten.';
+                        return null;
+                      },
+                      suffix: IconButton(
+                        splashRadius: 18,
+                        icon: Icon(
+                          _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
+                          size: 18,
+                          color: AppTheme.gray500,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (_error != null) ...[
@@ -314,7 +341,7 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
-  /// Bouwt een formulierveld met icoon en optioneel achtervoegsel.
+  /// Bouwt een formulierveld met icoon, validator en optioneel achtervoegsel.
   Widget _buildField({
     required TextEditingController controller,
     required String hint,
@@ -322,33 +349,62 @@ class _AuthPageState extends State<AuthPage> {
     bool obscure = false,
     Widget? suffix,
     TextInputType? keyboard,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
+    String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(999),
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      obscureText: obscure,
+      keyboardType: keyboard,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
+      autocorrect: false,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: validator,
+      style: TextStyle(
+        fontFamily: 'Manrope',
+        fontSize: 16,
+        color: AppTheme.black,
       ),
-      child: TextField(
-        controller: controller,
-        obscureText: obscure,
-        keyboardType: keyboard,
-        autocorrect: false,
-        style: TextStyle(
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 16,
-          color: AppTheme.black,
+          color: AppTheme.gray500,
         ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 16,
-            color: AppTheme.gray500,
-          ),
-          prefixIcon: Icon(icon, size: 20, color: AppTheme.orange500),
-          suffixIcon: suffix,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        prefixIcon: Icon(icon, size: 20, color: AppTheme.orange500),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: AppTheme.orange50,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: AppTheme.orange500, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: Color(0xFFB84C00), width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: Color(0xFFB84C00), width: 1.5),
+        ),
+        errorStyle: const TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 12,
+          color: Color(0xFFB84C00),
         ),
       ),
     );

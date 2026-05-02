@@ -659,7 +659,29 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     if (_games.isEmpty) {
       return Center(
-        child: Text('Geen games gevonden.', style: textTheme.bodyLarge),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.searchX, size: 48, color: AppTheme.orange500),
+              const SizedBox(height: 16),
+              Text(
+                'Geen games gevonden.',
+                style: textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.black,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Probeer een andere zoekterm of pas de filters aan.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(color: AppTheme.gray500),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -671,6 +693,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 16),
+      physics: const AlwaysScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: 8,
@@ -684,7 +707,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
         }
 
         final game = _games[index];
-        return GestureDetector(
+        return _ScaleTap(
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -712,6 +735,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       : Image.network(
                           game.coverUrl!,
                           fit: BoxFit.cover,
+                          semanticLabel: 'Omslagafbeelding van ${game.title}',
                           errorBuilder: (_, __, ___) => Icon(
                             LucideIcons.gamepad2,
                             size: 34,
@@ -964,6 +988,37 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
             child: const Text('Annuleren'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Scale-on-press microinteraction wrapper.
+class _ScaleTap extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _ScaleTap({required this.child, required this.onTap});
+
+  @override
+  State<_ScaleTap> createState() => _ScaleTapState();
+}
+
+class _ScaleTapState extends State<_ScaleTap> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: widget.child,
       ),
     );
   }
