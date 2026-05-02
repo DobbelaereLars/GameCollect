@@ -3,9 +3,11 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/scale_tap.dart';
 import '../../../core/database/database_helper.dart';
+import '../data/collection_notifier.dart';
 import '../domain/collection_item.dart';
 import 'collection_item_detail_page.dart';
 import 'widgets/add_platform_sheet.dart';
@@ -34,18 +36,15 @@ class CollectionPage extends StatefulWidget {
 class _CollectionPageState extends State<CollectionPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  List<CollectionItem> _allItems = [];
-  List<CollectionItem> _filteredItems = [];
-  bool _isLoading = true;
+  // UI-state: zichtlijkheid, filters en zoektekst blijven lokaal in de widget.
   bool _isGridView = ViewPreferences.defaultCollectionIsGridView;
-
-  // Filters
   Set<String> _selectedFormats = {};
   Set<String> _selectedPlatforms = {};
 
-  List<String> get _availablePlatforms {
+  /// Berekent de beschikbare platforms uit de gedeelde [CollectionNotifier].
+  List<String> _availablePlatforms(List<CollectionItem> items) {
     final platforms = <String>{};
-    for (final item in _allItems) {
+    for (final item in items) {
       for (final p in item.selectedPlatforms) {
         platforms.add(p.replaceAll(RegExp(r' \(.*\)$'), ''));
       }
@@ -58,9 +57,9 @@ class _CollectionPageState extends State<CollectionPage> {
   void initState() {
     super.initState();
     _loadViewPreference();
-    _loadCollection();
+    // App-state (collectielijst) wordt beheerd door CollectionNotifier via
+    // de provider — geen handmatige DatabaseHelper-listener nodig.
     _searchController.addListener(_applyFilters);
-    DatabaseHelper.instance.addListener(_loadCollection);
     CollectionPage.searchRequest.addListener(_onSearchRequest);
     CollectionPage.itemDetailRequest.addListener(_onItemDetailRequest);
     CollectionPage.scrollToTopRequest.addListener(_onScrollToTop);
@@ -78,7 +77,6 @@ class _CollectionPageState extends State<CollectionPage> {
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
-    DatabaseHelper.instance.removeListener(_loadCollection);
     CollectionPage.searchRequest.removeListener(_onSearchRequest);
     CollectionPage.itemDetailRequest.removeListener(_onItemDetailRequest);
     CollectionPage.scrollToTopRequest.removeListener(_onScrollToTop);
@@ -136,71 +134,47 @@ class _CollectionPageState extends State<CollectionPage> {
     }
   }
 
-  /// Laadt alle collectie-items uit de lokale database.
-  Future<void> _loadCollection() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    final items = await DatabaseHelper.instance.getCollectionItems();
-
-    setState(() {
-      _allItems = items;
-      _isLoading = false;
-      _applyFilters();
-    });
+  /// Signaleert een rebuild zodat de gefilterde lijst opnieuw berekend wordt.
+  /// De daadwerkelijke filtering vindt plaats in [_computeFiltered] (pure functie).
+  void _applyFilters() {
+    if (mounted) setState(() {});
   }
 
-  /// Past de zoekopdracht en actieve filters toe op de volledige itemlijst.
-  void _applyFilters() {
+  /// Berekent de gefilterde itemlijst op basis van [allItems] en de huidige
+  /// UI-staat (zoekterm, geselecteerde platforms en formaten).
+  List<CollectionItem> _computeFiltered(List<CollectionItem> allItems) {
     final query = _searchController.text.toLowerCase();
-
-    setState(() {
-      _filteredItems = _allItems.where((item) {
-        // Tekst zoeken
-        final matchesQuery = item.title.toLowerCase().contains(query);
-
-        // Controleer of minstens één platform aan beide filters voldoet.
-        bool matchesAnyPlatform = false;
-
-        if (_selectedFormats.isEmpty && _selectedPlatforms.isEmpty) {
-          matchesAnyPlatform = true;
-        } else {
-          for (final p in item.selectedPlatforms) {
-            final cleanPlatform = p.replaceAll(RegExp(r' \(.*\)$'), '');
-
-            String specificFormat = "Fysiek & Digitaal";
-            final formatMatch = RegExp(r"\((.*?)\)$").firstMatch(p);
-            if (formatMatch != null) {
-              specificFormat = formatMatch.group(1) ?? "Fysiek & Digitaal";
-            }
-            if (specificFormat == 'Allebei') {
-              specificFormat = 'Fysiek & Digitaal';
-            }
-
-            bool pMatchesFormat = true;
-            if (_selectedFormats.isNotEmpty) {
-              pMatchesFormat = _selectedFormats.contains(specificFormat);
-            }
-
-            bool pMatchesPlatform = true;
-            if (_selectedPlatforms.isNotEmpty) {
-              pMatchesPlatform = _selectedPlatforms.contains(cleanPlatform);
-            }
-
-            if (pMatchesFormat && pMatchesPlatform) {
-              matchesAnyPlatform = true;
-              break;
-            }
+    return allItems.where((item) {
+      final matchesQuery = item.title.toLowerCase().contains(query);
+      bool matchesAnyPlatform = false;
+      if (_selectedFormats.isEmpty && _selectedPlatforms.isEmpty) {
+        matchesAnyPlatform = true;
+      } else {
+        for (final p in item.selectedPlatforms) {
+          final cleanPlatform = p.replaceAll(RegExp(r' \(.*\)$'), '');
+          String specificFormat = 'Fysiek & Digitaal';
+          final formatMatch = RegExp(r'\((.*?)\)$').firstMatch(p);
+          if (formatMatch != null) {
+            specificFormat = formatMatch.group(1) ?? 'Fysiek & Digitaal';
+          }
+          if (specificFormat == 'Allebei') specificFormat = 'Fysiek & Digitaal';
+          final pMatchesFormat =
+              _selectedFormats.isEmpty || _selectedFormats.contains(specificFormat);
+          final pMatchesPlatform =
+              _selectedPlatforms.isEmpty || _selectedPlatforms.contains(cleanPlatform);
+          if (pMatchesFormat && pMatchesPlatform) {
+            matchesAnyPlatform = true;
+            break;
           }
         }
-
-        return matchesQuery && matchesAnyPlatform;
-      }).toList();
-    });
+      }
+      return matchesQuery && matchesAnyPlatform;
+    }).toList();
   }
 
   void _showFilterBottomSheet() {
+    // App-state lezen zonder te luisteren (geen rebuild nodig hier).
+    final allItems = context.read<CollectionNotifier>().items;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -210,7 +184,7 @@ class _CollectionPageState extends State<CollectionPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => FilterBottomSheetContent(
-        availablePlatforms: _availablePlatforms,
+        availablePlatforms: _availablePlatforms(allItems),
         initialFormats: Set.from(_selectedFormats),
         initialPlatforms: Set.from(_selectedPlatforms),
         hasActiveFilters:
@@ -218,12 +192,10 @@ class _CollectionPageState extends State<CollectionPage> {
         onClearFilters: () => setState(() {
           _selectedFormats.clear();
           _selectedPlatforms.clear();
-          _applyFilters();
         }),
         onApply: (formats, platforms) => setState(() {
           _selectedFormats = formats;
           _selectedPlatforms = platforms;
-          _applyFilters();
         }),
       ),
     );
@@ -231,6 +203,14 @@ class _CollectionPageState extends State<CollectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    // App-state: luisteren op CollectionNotifier triggert een rebuild wanneer
+    // de collectie in de database wijzigt. Filtering (UI-state) wordt daarna
+    // puur berekend zonder extra setState-aanroepen.
+    final collection = context.watch<CollectionNotifier>();
+    final allItems = collection.items;
+    final isLoading = collection.isLoading;
+    final filteredItems = _computeFiltered(allItems);
+
     return Scaffold(
       backgroundColor: AppTheme.white,
       body: SafeArea(
@@ -238,7 +218,7 @@ class _CollectionPageState extends State<CollectionPage> {
         child: Column(
           children: [
             // Glass effect search bar area
-            if (_isLoading || _allItems.isNotEmpty)
+            if (isLoading || allItems.isNotEmpty)
               BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                 child: Container(
@@ -317,21 +297,25 @@ class _CollectionPageState extends State<CollectionPage> {
                 ),
               ),
             // Content
-            Expanded(child: _buildBody()),
+            Expanded(child: _buildBody(allItems, isLoading, filteredItems)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
+  Widget _buildBody(
+    List<CollectionItem> allItems,
+    bool isLoading,
+    List<CollectionItem> filteredItems,
+  ) {
+    if (isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: AppTheme.orange500),
       );
     }
 
-    if (_allItems.isEmpty) {
+    if (allItems.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -361,7 +345,7 @@ class _CollectionPageState extends State<CollectionPage> {
     }
 
     Map<String, List<CollectionItem>> groupedItems = {};
-    for (final item in _filteredItems) {
+    for (final item in filteredItems) {
       for (final platformWithFormat in item.selectedPlatforms) {
         final platformNameMatch = RegExp(
           r"^(.*?)(?:\s*\([^)]*\))?$",
@@ -434,10 +418,10 @@ class _CollectionPageState extends State<CollectionPage> {
       }
       final seenApiIds = <int>{};
       final groups = <List<CollectionItem>>[];
-      for (final item in _filteredItems) {
+      for (final item in filteredItems) {
         if (!passingItems.contains(item)) continue;
         if (seenApiIds.add(item.apiId)) {
-          final allForGame = _filteredItems
+          final allForGame = filteredItems
               .where((e) => e.apiId == item.apiId && passingItems.contains(e))
               .toList(growable: false);
           groups.add(allForGame);
@@ -636,7 +620,10 @@ class _CollectionPageState extends State<CollectionPage> {
                         context,
                         item: item,
                         unownedPlatforms: unownedPlatforms,
-                        onAdded: _loadCollection,
+                        onAdded: () {
+                          // CollectionNotifier herlaadt automatisch via
+                          // DatabaseHelper.notifyListeners().
+                        },
                       );
                     },
                   ),
@@ -677,7 +664,8 @@ class _CollectionPageState extends State<CollectionPage> {
                             );
                           }
 
-                          _loadCollection();
+                          // CollectionNotifier herlaadt automatisch via
+                          // DatabaseHelper.notifyListeners().
                           if (mounted) {
                             messenger
                               ..removeCurrentSnackBar()
@@ -711,7 +699,8 @@ class _CollectionPageState extends State<CollectionPage> {
                         onConfirm: () async {
                           await DatabaseHelper.instance
                               .deleteCollectionItemsByApiId(item.apiId);
-                          _loadCollection();
+                          // CollectionNotifier herlaadt automatisch via
+                          // DatabaseHelper.notifyListeners().
                           if (mounted) {
                             messenger
                               ..removeCurrentSnackBar()

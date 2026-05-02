@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../collection/data/collection_notifier.dart';
 import '../../collection/domain/collection_item.dart';
 import '../../collection/presentation/collection_page.dart';
 import '../../discover/data/rawg_games_api.dart';
@@ -31,11 +32,7 @@ class OverviewPage extends StatefulWidget {
 
 class _OverviewPageState extends State<OverviewPage> {
   final ScrollController _scrollController = ScrollController();
-  // ── Collection (offline) ──────────────────────────────────────────────────
-  List<CollectionItem> _collectionItems = [];
-  bool _isLoadingCollection = true;
-
-  // ── Trending games (online / RAWG) ────────────────────────────────────────
+  // ── Trending games (online / RAWG) — lokale UI-state ─────────────────────
   final http.Client _httpClient = http.Client();
   final RawgGamesApi _rawgApi = const RawgGamesApi();
   List<RawgGame> _trendingRaw = [];
@@ -52,9 +49,9 @@ class _OverviewPageState extends State<OverviewPage> {
   @override
   void initState() {
     super.initState();
-    _loadCollection();
+    // App-state (collectielijst) wordt beheerd door CollectionNotifier via
+    // de provider — geen handmatige DatabaseHelper-listener nodig.
     _fetchTrending();
-    DatabaseHelper.instance.addListener(_loadCollection);
     OverviewPage.scrollToTopRequest.addListener(_onScrollToTop);
   }
 
@@ -73,24 +70,12 @@ class _OverviewPageState extends State<OverviewPage> {
   void dispose() {
     _slowConnectionTimer?.cancel();
     _httpClient.close();
-    DatabaseHelper.instance.removeListener(_loadCollection);
     OverviewPage.scrollToTopRequest.removeListener(_onScrollToTop);
     _scrollController.dispose();
     super.dispose();
   }
 
   // ── Gegevens ophalen ─────────────────────────────────────────────────────
-
-  /// Laadt de collectie-items uit de lokale database.
-  Future<void> _loadCollection() async {
-    if (!mounted) return;
-    final items = await DatabaseHelper.instance.getCollectionItems();
-    if (!mounted) return;
-    setState(() {
-      _collectionItems = items;
-      _isLoadingCollection = false;
-    });
-  }
 
   /// Haalt trending games op via de RAWG API met trage-verbinding-indicator.
   Future<void> _fetchTrending() async {
@@ -149,10 +134,10 @@ class _OverviewPageState extends State<OverviewPage> {
     }
   }
 
-  // ── Computed properties ───────────────────────────────────────────────────
+  // ── Computed properties (ontvangen collectionItems van provider) ──────────
 
-  List<RawgGame> get _trendingGames {
-    final ownedIds = _collectionItems.map((e) => e.apiId).toSet();
+  List<RawgGame> _trendingGames(List<CollectionItem> collectionItems) {
+    final ownedIds = collectionItems.map((e) => e.apiId).toSet();
     return _trendingRaw
         .where((g) => !ownedIds.contains(g.id))
         .take(10)
@@ -160,30 +145,28 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   /// Totaal aantal unieke spellen in de collectie (per apiId).
-  int get _totalUniqueGames =>
-      _collectionItems.map((e) => e.apiId).toSet().length;
+  int _totalUniqueGames(List<CollectionItem> collectionItems) =>
+      collectionItems.map((e) => e.apiId).toSet().length;
 
   /// Totale speeltijd in minuten over alle collectie-items.
-  int get _totalPlaytimeMinutes =>
-      _collectionItems.fold(0, (sum, item) => sum + item.totalPlaytimeMinutes);
+  int _totalPlaytimeMinutes(List<CollectionItem> collectionItems) =>
+      collectionItems.fold(0, (sum, item) => sum + item.totalPlaytimeMinutes);
 
   /// Aantal unieke voltooide spellen (manueel of via voortgangsratio).
-  int get _completedCount => _collectionItems
+  int _completedCount(List<CollectionItem> collectionItems) => collectionItems
       .where((item) => item.isManuallyCompleted || item.progressRatio >= 1.0)
       .map((e) => e.apiId)
       .toSet()
       .length;
 
   /// Unieke games uit de collectie (eerste voorkomen per apiId), max 10.
-  /// Elke groep bevat allItems (alle platform-entries voor dezelfde apiId)
-  /// zodat de kaart platformbadges kan tonen.
-  List<_GameGroup> get _recentGroups {
+  List<_GameGroup> _recentGroups(List<CollectionItem> collectionItems) {
     final seen = <int>{};
     final result = <_GameGroup>[];
-    for (final item in _collectionItems) {
+    for (final item in collectionItems) {
       if (!seen.contains(item.apiId)) {
         seen.add(item.apiId);
-        final allForGame = _collectionItems
+        final allForGame = collectionItems
             .where((e) => e.apiId == item.apiId)
             .toList(growable: false);
         result.add(_GameGroup(representative: item, allItems: allForGame));
@@ -193,14 +176,14 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   /// Games waarbij minstens één platform speelduur heeft, nog niet voltooid is
-  /// en een speelduurinvoer heeft van de afgelopen 5 dagen. Gesorteerd op totale speelduur (aflopend).
-  List<_GameGroup> get _inProgressGroups {
+  /// en een speelduurinvoer heeft van de afgelopen 5 dagen.
+  List<_GameGroup> _inProgressGroups(List<CollectionItem> collectionItems) {
     final seen = <int>{};
     final candidates = <_GameGroup>[];
     final cutoff = DateTime.now().subtract(const Duration(days: 5));
-    for (final item in _collectionItems) {
+    for (final item in collectionItems) {
       if (!seen.contains(item.apiId)) {
-        final allForGame = _collectionItems
+        final allForGame = collectionItems
             .where((e) => e.apiId == item.apiId)
             .toList(growable: false);
         final totalMinutes = allForGame.fold<int>(
@@ -236,9 +219,9 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   /// Total minutes from playtime entries added in the last 7 days.
-  int get _last7DaysMinutes {
+  int _last7DaysMinutes(List<CollectionItem> collectionItems) {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
-    return _collectionItems.fold<int>(
+    return collectionItems.fold<int>(
       0,
       (sum, item) =>
           sum +
@@ -289,6 +272,12 @@ class _OverviewPageState extends State<OverviewPage> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+
+    // App-state: luistert op CollectionNotifier en triggert een rebuild
+    // wanneer de collectielijst wijzigt. UI-state (trending) blijft lokaal.
+    final collection = context.watch<CollectionNotifier>();
+    final collectionItems = collection.items;
+    final isLoadingCollection = collection.isLoading;
 
     return Scaffold(
       backgroundColor: AppTheme.white,
@@ -342,7 +331,7 @@ class _OverviewPageState extends State<OverviewPage> {
                         color: AppTheme.gray500,
                       ),
                     ),
-                    if (!_isLoadingCollection) ...[
+                    if (!isLoadingCollection) ...[
                       const SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -351,18 +340,18 @@ class _OverviewPageState extends State<OverviewPage> {
                             _StatChip(
                               icon: LucideIcons.library,
                               label:
-                                  '$_totalUniqueGames ${_totalUniqueGames == 1 ? 'game' : 'games'}',
+                                  '${_totalUniqueGames(collectionItems)} ${_totalUniqueGames(collectionItems) == 1 ? 'game' : 'games'}',
                             ),
                             const SizedBox(width: 8),
                             _StatChip(
                               icon: LucideIcons.clock,
-                              label: _formatMinutes(_totalPlaytimeMinutes),
+                              label: _formatMinutes(_totalPlaytimeMinutes(collectionItems)),
                             ),
-                            if (_completedCount > 0) ...[
+                            if (_completedCount(collectionItems) > 0) ...[
                               const SizedBox(width: 8),
                               _StatChip(
                                 icon: LucideIcons.trophy,
-                                label: '$_completedCount voltooid',
+                                label: '${_completedCount(collectionItems)} voltooid',
                               ),
                             ],
                           ],
@@ -382,18 +371,18 @@ class _OverviewPageState extends State<OverviewPage> {
                   _SectionHeader(
                     title: 'Mijn collectie',
                     actionLabel:
-                        (!_isLoadingCollection && _collectionItems.isNotEmpty)
+                        (!isLoadingCollection && collectionItems.isNotEmpty)
                         ? 'Bekijk alles'
                         : null,
                     onAction: () => OverviewPage.switchToTabRequest.value = 1,
                   ),
-                  if (_isLoadingCollection)
+                  if (isLoadingCollection)
                     const _HorizontalLoadingPlaceholder()
-                  else if (_collectionItems.isEmpty)
+                  else if (collectionItems.isEmpty)
                     const _EmptyCollectionCard()
                   else
                     _HorizontalGroupList(
-                      groups: _recentGroups,
+                      groups: _recentGroups(collectionItems),
                       showProgress: false,
                       formatMinutes: _formatMinutes,
                       onTap: _navigateToDetail,
@@ -403,14 +392,14 @@ class _OverviewPageState extends State<OverviewPage> {
             ),
 
             // ── Bezig met spelen (conditioneel) ───────────────────────────
-            if (!_isLoadingCollection && _inProgressGroups.isNotEmpty)
+            if (!isLoadingCollection && _inProgressGroups(collectionItems).isNotEmpty)
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const _SectionHeader(title: 'Bezig met spelen'),
                     _HorizontalGroupList(
-                      groups: _inProgressGroups,
+                      groups: _inProgressGroups(collectionItems),
                       showProgress: true,
                       formatMinutes: _formatMinutes,
                       onTap: _navigateToDetail,
@@ -420,12 +409,12 @@ class _OverviewPageState extends State<OverviewPage> {
               ),
 
             // ── Speelduur samenvatting ────────────────────────────────────
-            if (!_isLoadingCollection && _last7DaysMinutes > 0)
+            if (!isLoadingCollection && _last7DaysMinutes(collectionItems) > 0)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                   child: _PlaytimeSummaryCard(
-                    weekMinutes: _last7DaysMinutes,
+                    weekMinutes: _last7DaysMinutes(collectionItems),
                     formatMinutes: _formatMinutes,
                   ),
                 ),
@@ -457,7 +446,7 @@ class _OverviewPageState extends State<OverviewPage> {
                       )
                     else
                       _HorizontalTrendingList(
-                        games: _trendingGames,
+                        games: _trendingGames(collectionItems),
                         onTap: _navigateToGame,
                       ),
                   ],

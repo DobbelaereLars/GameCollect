@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/notifications/notification_service.dart';
@@ -32,25 +33,21 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) setState(() => _version = info.version);
     });
     _syncNotificationState();
-    AuthService.instance.addListener(_onSyncOrAuthChange);
-    SyncService.instance.addListener(_onSyncOrAuthChange);
-    ConnectivityService.instance.addListener(_onSyncOrAuthChange);
+    // Auth, sync en connectiviteitswijzigingen worden afgevangen via
+    // context.watch<T>() in build() — geen handmatige addListener nodig.
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Herlaad meldingsstatus wanneer een provider-afhankelijkheid wijzigt
+    // (bijv. auth-status na sign-in/sign-out).
+    _syncNotificationState();
   }
 
   @override
   void dispose() {
-    AuthService.instance.removeListener(_onSyncOrAuthChange);
-    SyncService.instance.removeListener(_onSyncOrAuthChange);
-    ConnectivityService.instance.removeListener(_onSyncOrAuthChange);
     super.dispose();
-  }
-
-  /// Reageert op wijzigingen in auth-, sync- of verbindingsstatus.
-  void _onSyncOrAuthChange() {
-    if (!mounted) return;
-    // De meldingsvoorkeur kan zojuist gewijzigd zijn door sync.
-    _syncNotificationState();
-    setState(() {});
   }
 
   /// Synchroniseert de meldingsstatus tussen systeemrechten en de database.
@@ -186,6 +183,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Luistert op auth-, connectiviteits- en synchronisatiestatus via de
+    // provider. Bij elke wijziging wordt build() opnieuw aangeroepen zodat
+    // de UI altijd de actuele staat toont — zonder handmatige setState.
+    context.watch<AuthService>();
+    context.watch<ConnectivityService>();
+    context.watch<SyncService>();
+
     return Scaffold(
       backgroundColor: AppTheme.white,
       appBar: AppBar(
