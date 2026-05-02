@@ -958,72 +958,75 @@ class _GridCoverCardState extends State<_GridCoverCard> {
                 ),
               ),
 
-              // Top-left platform badge (same style as overview _CoverBadge)
+              // Top-left: platform badge + optioneel trophy bij voltooiing
               if (platformName != null)
                 Positioned(
                   top: 8,
                   left: 8,
                   right: 8,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 4,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.orange50,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    LucideIcons.gamepad2,
+                                    size: 11,
+                                    color: AppTheme.orange500,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      platformName.isNotEmpty
+                                          ? platformName
+                                          : '?',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontFamily: 'Manrope',
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.orange700,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
+                        ],
+                      ),
+                      if (isCompleted) ...[
+                        const SizedBox(height: 5),
+                        Container(
+                          padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            color: AppTheme.orange50,
+                            color: AppTheme.orange500,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                LucideIcons.gamepad2,
-                                size: 11,
-                                color: AppTheme.orange500,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  platformName.isNotEmpty ? platformName : '?',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: 'Manrope',
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.orange700,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          child: const Icon(
+                            LucideIcons.trophy,
+                            size: 11,
+                            color: AppTheme.trueWhite,
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ),
-                ),
-
-              // Trophy badge — top-right bij 100% voltooiing
-              if (isCompleted)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.orange500,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      LucideIcons.trophy,
-                      size: 11,
-                      color: AppTheme.trueWhite,
-                    ),
                   ),
                 ),
 
@@ -1177,23 +1180,46 @@ class _CollectionListCard extends StatelessWidget {
                   ),
                   child: SizedBox(
                     width: 100,
-                    child: item.customCoverPath != null
-                        ? Image.file(
-                            File(item.customCoverPath!),
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            errorBuilder: (_, _, _) => _CoverPlaceholder(),
-                          )
-                        : (item.coverUrl != null
-                              ? Image.network(
-                                  item.coverUrl!,
-                                  fit: BoxFit.cover,
-                                  semanticLabel:
-                                      'Omslagafbeelding van ${item.title}',
-                                  errorBuilder: (_, _, _) =>
-                                      _CoverPlaceholder(),
-                                )
-                              : _CoverPlaceholder()),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        item.customCoverPath != null
+                            ? Image.file(
+                                File(item.customCoverPath!),
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) => _CoverPlaceholder(),
+                              )
+                            : (item.coverUrl != null
+                                  ? Image.network(
+                                      item.coverUrl!,
+                                      fit: BoxFit.cover,
+                                      semanticLabel:
+                                          'Omslagafbeelding van ${item.title}',
+                                      errorBuilder: (_, _, _) =>
+                                          _CoverPlaceholder(),
+                                    )
+                                  : _CoverPlaceholder()),
+                        if (item.isManuallyCompleted ||
+                            item.progressRatio >= 1.0)
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.orange500,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                LucideIcons.trophy,
+                                size: 11,
+                                color: AppTheme.trueWhite,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 // Metadata kolom
@@ -1299,21 +1325,13 @@ class _CollectionListCard extends StatelessWidget {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
                                 height: 1.4,
-                                color: (item.isManuallyCompleted ||
+                                color:
+                                    (item.isManuallyCompleted ||
                                         item.progressRatio >= 1.0)
                                     ? AppTheme.orange500
                                     : AppTheme.gray500,
                               ),
                             ),
-                            if (item.isManuallyCompleted ||
-                                item.progressRatio >= 1.0) ...[                              
-                              const SizedBox(width: 4),
-                              const Icon(
-                                LucideIcons.trophy,
-                                size: 13,
-                                color: AppTheme.orange500,
-                              ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 8),

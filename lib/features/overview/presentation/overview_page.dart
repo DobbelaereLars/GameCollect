@@ -925,7 +925,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                       ),
                     ),
 
-                    // Top-left badges: platform (multi only) + playtime (in-progress only)
+                    // Top-left badges: platform + playtime + trophy bij voltooiing
                     Positioned(
                       top: 8,
                       left: 8,
@@ -942,7 +942,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                             const SizedBox(height: 5),
                           ],
                           if (widget.showProgress &&
-                              current.totalPlaytimeMinutes > 0)
+                              current.totalPlaytimeMinutes > 0) ...[
                             _CoverBadge(
                               icon: LucideIcons.clock,
                               label: widget.formatMinutes(
@@ -950,28 +950,24 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                               ),
                               filled: true,
                             ),
+                            const SizedBox(height: 5),
+                          ],
+                          if (isCompleted)
+                            Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.orange500,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                LucideIcons.trophy,
+                                size: 11,
+                                color: AppTheme.trueWhite,
+                              ),
+                            ),
                         ],
                       ),
                     ),
-
-                    // Trophy badge — top-right bij 100% voltooiing
-                    if (isCompleted)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.orange500,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Icon(
-                            LucideIcons.trophy,
-                            size: 11,
-                            color: AppTheme.trueWhite,
-                          ),
-                        ),
-                      ),
 
                     // Bottom gradient + title + optional playtime
                     Positioned(
