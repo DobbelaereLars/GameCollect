@@ -53,6 +53,9 @@ class _AuthPageState extends State<AuthPage> {
     });
 
     try {
+      // Onderdruk automatische sync tijdens de aanmeldflow zodat de
+      // strategiedialoog kans krijgt vóór enige synchronisatie.
+      SyncService.instance.suppressAutoSync();
       if (_mode == AuthMode.signIn) {
         await AuthService.instance.signIn(email: email, password: password);
       } else {
@@ -96,6 +99,7 @@ class _AuthPageState extends State<AuthPage> {
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
+      SyncService.instance.resumeAutoSync();
       if (mounted) setState(() => _isSubmitting = false);
     }
   }

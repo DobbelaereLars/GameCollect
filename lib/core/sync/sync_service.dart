@@ -48,6 +48,17 @@ class SyncService extends ChangeNotifier {
   Timer? _autoSyncTimer;
   bool _wired = false;
 
+  /// Wanneer true wordt de automatische sync na auth/connectiviteitswijzigingen
+  /// onderdrukt. Gebruik dit tijdens de aanmeldflow om een vroegtijdige sync
+  /// vóór de strategiekeuze te voorkomen.
+  bool _suppressAutoSync = false;
+
+  /// Onderdruk automatische sync tijdelijk (bijv. tijdens aanmeldflow).
+  void suppressAutoSync() => _suppressAutoSync = true;
+
+  /// Herstel automatische sync na handmatige syncafhandeling.
+  void resumeAutoSync() => _suppressAutoSync = false;
+
   bool get isSyncing => _isSyncing;
   String? get lastError => _lastError;
   DateTime? get lastSyncAt => _lastSyncAt;
@@ -81,6 +92,7 @@ class SyncService extends ChangeNotifier {
   /// Reageert op wijzigingen in authenticatie of connectiviteit: start sync indien mogelijk.
   void _onAuthOrConnectivityChange() {
     _refreshPendingCount();
+    if (_suppressAutoSync) return;
     if (AuthService.instance.isSignedIn &&
         ConnectivityService.instance.isOnline) {
       // Achtergrond uitvoeren; fouten worden via [lastError] zichtbaar gemaakt.
