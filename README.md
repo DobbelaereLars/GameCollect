@@ -1,224 +1,106 @@
 # GameCollect
 
-GameCollect is een Flutter-appconcept waarmee gebruikers hun fysieke en digitale gamecollectie kunnen beheren op basis van een vooraf ingevulde databank met bekende games. Gebruikers kunnen games opzoeken, toevoegen aan hun persoonlijke collectie en hun voortgang opvolgen aan de hand van een standaard completion-checklist die per game in de databank is voorzien.
+Getest op **iOS** en **Android**.
 
-## Projectconcept
+---
 
-Veel gamers bezitten games verspreid over verschillende platformen zoals Nintendo Switch, pc, PlayStation en Xbox. Het bijhouden van welke games ze bezitten, welke ze nog moeten spelen en hoe ver ze staan in een game gebeurt vaak verspreid over verschillende apps, websites of spreadsheets.
+## Opstarten
 
-GameCollect wil dit oplossen door één centrale mobiele applicatie aan te bieden waarin:
+> De eerste build kan tot **15 minuten** duren. Daarna is alles gecached en gaat het veel sneller.
 
-- een lijst met bekende games al standaard beschikbaar is;
-- gebruikers games uit die databank kunnen toevoegen aan hun eigen collectie;
-- elke toegevoegde game een vaste set completion-doelen of checklist-items bevat;
-- spelers hun voortgang eenvoudig kunnen opvolgen;
-- gebruikers optioneel ook zelf extra games kunnen toevoegen.
+### Met FVM (aanbevolen)
 
-Het doel is om een moderne, gebruiksvriendelijke en visueel sterke app te ontwikkelen met een duidelijke focus op collectiebeheer, backlog-opvolging en completion tracking.
+```bash
+fvm use
+fvm flutter pub get
+fvm flutter run
+```
 
-## Doelgroep
+### Zonder FVM
 
-GameCollect is bedoeld voor:
+```bash
+flutter pub get
+flutter run
+```
 
-- gamers met zowel fysieke als digitale games;
-- gebruikers met een grote backlog;
-- spelers die hun voortgang duidelijk willen opvolgen;
-- completionists die willen bijhouden welke stappen nog nodig zijn om een game volledig af te werken.
+Zorg dat je Flutter-versie overeenkomt met de versie in `.fvmrc`.
 
-## Probleemstelling
+---
 
-Veel game tracking-oplossingen vragen nog te veel manuele input of focussen slechts op één onderdeel, zoals enkel een backlog of enkel een lijst van bezeten games. GameCollect combineert meerdere noden in één app door gebruik te maken van een vooraf ingevulde gamedatabase én een persoonlijke gebruikerscollectie.
+## Vereiste configuratie
 
-Daardoor hoeft de gebruiker niet alles zelf in te geven en krijgt de app meteen een rijkere en meer afgewerkte ervaring.
+### 1. RAWG API-sleutel
 
-## Kernidee
+Maak een gratis account aan op [https://rawg.io/apiv2](https://rawg.io/apiv2) en kopieer je API-sleutel.
 
-De app bestaat uit twee belangrijke onderdelen:
+```bash
+cp .env.example .env
+```
 
-### 1. Centrale gamedatabase
+Open `.env` en vervang de placeholder:
 
-De applicatie bevat standaard een lijst met bekende games. Elke game in deze databank bevat basisinformatie zoals:
+```
+RAWG_API_KEY=jouw_sleutel_hier
+```
 
-- titel
-- platform(en)
-- cover
-- genre
-- geschatte speelduur
-- standaard completion-checklist
+### 2. Firebase
 
-### 2. Persoonlijke collectie
+**Stap 1 — Maak een Firebase-project aan**
 
-Gebruikers kunnen een game uit de databank toevoegen aan hun eigen collectie. Vanaf dat moment kunnen ze:
+1. Ga naar [https://console.firebase.google.com](https://console.firebase.google.com) en klik op **Project toevoegen**.
+2. Geef het project een naam en doorloop de wizard.
+3. Activeer in het project de volgende producten:
+   - **Authentication** → inlogmethode e-mail/wachtwoord inschakelen
+   - **Firestore Database** → aanmaken in productie- of testmodus
+   - **Storage** → aanmaken in productie- of testmodus
 
-- de status aanpassen;
-- voortgang bijhouden;
-- checklist-items afvinken;
-- persoonlijke tags toevoegen;
-- notities opslaan.
+**Stap 2 — Koppel het project aan de app**
 
-Hierdoor combineert de app een algemene catalogus met een persoonlijke trackingervaring.
+Installeer de Firebase CLI en FlutterFire CLI als je dat nog niet hebt:
 
-## Belangrijkste functionaliteiten
+```bash
+npm install -g firebase-tools
+dart pub global activate flutterfire_cli
+```
 
-### 1. Games zoeken en toevoegen uit databank
+Meld je aan en koppel het project:
 
-Gebruikers kunnen bekende games zoeken in een standaarddatabase en die toevoegen aan hun persoonlijke collectie.
+```bash
+firebase login
+flutterfire configure
+```
 
-### 2. Covergrid-overzicht
+Kies tijdens `flutterfire configure` het project dat je net hebt aangemaakt. Dit genereert `lib/firebase_options.dart` en voegt de benodigde bestanden toe aan `android/` en `ios/`.
 
-De eigen collectie wordt weergegeven in een visuele grid-layout met covers zodat gebruikers snel een overzicht krijgen van hun bibliotheek.
+---
 
-### 3. Backlog- en statusbeheer
+## Wat biedt de app
 
-Elke game in de collectie kan een status krijgen, zoals:
+- **Collectiebeheer** — voeg games toe aan je persoonlijke collectie, kies het platform en stel een status in (wil ik spelen, bezig, gespeeld, voltooid).
+- **Voortgang bijhouden** — registreer speelduur per sessie en volg je completion-percentage op via een checklist van doelen per game.
+- **Aangepaste covers** — vervang de standaardcover door een foto uit je galerij; de afbeelding wordt automatisch gecomprimeerd (<500 KB) en gesynchroniseerd naar de cloud.
+- **Overzichtspagina** — bekijk in één oogopslag je collectie, games waar je mee bezig bent en trending games via de RAWG API.
+- **Ontdekken** — blader door trending en populaire games, zoek op naam en voeg ze direct toe aan je collectie.
+- **App-achievements** — verdien in-app beloningen op basis van mijlpalen (aantal games, speelduur, voltooiingen, …).
+- **Meldingen** — optionele dagelijkse herinnering om te gamen, instelbaar via de profielpagina.
+- **Cloud sync** — bidirectionele synchronisatie tussen lokale SQLite en Firestore (last-write-wins per record). Bij aanmelden met bestaande data kies je zelf: alleen cloud, alleen lokaal of samenvoegen.
 
-- Backlog
-- Bezig met spelen
-- Uitgespeeld
-- Gecompleteerd
-- Gedropt
+---
 
-### 4. Completion-checklist
+## Firebase-structuur
 
-Elke game bevat een standaard checklist die uit de databank komt. Gebruikers kunnen deze checklist afvinken om hun voortgang bij te houden richting het uitspelen of volledig completen van een game.
+### Firestore
 
-Voorbeelden van checklist-items:
+```
+users/{uid}/
+  collection/{syncId}       — collectie-items (game, platform, status, speelduur, voortgang, …)
+  appAchievements/{id}      — behaalde in-app achievements
+  eventCounters/{key}       — tellers voor achievement-triggers (bijv. aantal sessies)
+  settings/notifications    — notificatievoorkeur
+```
 
-- hoofdverhaal voltooid
-- side quests afgewerkt
-- collectibles verzameld
-- achievements behaald
-- 100% completion bereikt
+### Firebase Storage
 
-### 5. Persoonlijke tags en notities
-
-Gebruikers kunnen eigen tags toevoegen, zoals:
-
-- favoriet
-- must play
-- korte game
-- co-op
-- multiplayer
-
-Daarnaast kunnen ze ook persoonlijke notities bewaren.
-
-### 6. Handmatig games toevoegen
-
-Als extra functionaliteit kunnen gebruikers ook zelf een game toevoegen wanneer die niet in de standaarddatabase aanwezig is.
-
-### 7. Filteren en sorteren
-
-Gebruikers kunnen hun collectie filteren en sorteren op basis van:
-
-- platform
-- status
-- tags
-- voortgang
-- alfabetische volgorde
-- recent toegevoegd
-
-## MVP-scope
-
-De eerste versie van GameCollect focust op de kernfunctionaliteiten die nodig zijn om het concept duidelijk te tonen.
-
-### De MVP bevat
-
-- een vooraf ingevulde databank met bekende games;
-- een zoekfunctie binnen die databank;
-- games toevoegen aan een persoonlijke collectie;
-- een covergrid-overzicht van de collectie;
-- statusbeheer per game;
-- een standaard completion-checklist per game;
-- checklist-items afvinken;
-- lokale opslag van gebruikersdata.
-
-### Mogelijke uitbreidingen
-
-- handmatig games toevoegen;
-- wishlist;
-- statistiekenpagina;
-- favorieten;
-- import/export van data;
-- synchronisatie tussen toestellen;
-- online backend.
-
-## UX en UI
-
-Een belangrijk doel van dit project is het ontwikkelen van een moderne en overzichtelijke mobiele gebruikerservaring. De app moet niet aanvoelen als een simpele lijst, maar als een visueel aantrekkelijke game companion app.
-
-De focus ligt op:
-
-- een sterke covergebaseerde interface;
-- duidelijke navigatie tussen lijst en detailpagina;
-- eenvoudige progress- en checklistinteractie;
-- consistente styling;
-- een moderne en hedendaagse uitstraling.
-
-## Data-opslag
-
-De app maakt gebruik van twee soorten
-
-- standaard gamegegevens die vooraf in de databank aanwezig zijn;
-- persoonlijke gebruikersgegevens zoals collectie, status, tags, notities en checklist-voortgang.
-
-In de eerste versie wordt gebruikersdata lokaal opgeslagen. Een latere versie zou eventueel een backend of synchronisatie kunnen voorzien.
-
-## Platformfocus
-
-De app wordt ontwikkeld in Flutter, met focus op mobiel gebruik. De eerste versie richt zich op één platform, maar het concept kan later makkelijk uitgebreid worden naar zowel Android als iOS.
-
-## Waarom dit project interessant is
-
-GameCollect is meer dan een gewone collectie-app omdat het drie onderdelen combineert:
-
-- een vooraf ingevulde gamedatabase;
-- een persoonlijke collectie;
-- completion tracking via standaard checklists.
-
-Daardoor ontstaat een interessanter en uitdagender project met voldoende ruimte voor sterke UI/UX, een logische datastructuur en een afgewerkt productgevoel.
-
-## Geplande technologie
-
-- Flutter
-- Dart
-- Lokale opslag, bijvoorbeeld Hive of SQLite
-- Firebase (optioneel, voor online opslag en synchronisatie)
-- Een duidelijke en herbruikbare widget-structuur
-
-## Uitgebreide functionaliteiten
-
-GameCollect focust op meer dan basiscollectiebeheer. De app combineert collectiebeheer met slimme invoer, voortgangsondersteuning, updates en sociale interactie.
-
-### Functionele richting
-
-- Integratie met de RAWG API als bron voor game-metadata, covers, platformen, speelduur en extra contextdata.
-- Camera- en barcode-scanflow om fysieke games sneller en met minder manuele input aan de collectie toe te voegen.
-- Lokale notificaties voor herinneringen, bijvoorbeeld om verder te spelen of om bijna voltooide checklist-doelen af te ronden.
-- Share-functionaliteit vanaf de eerste versies, zodat gebruikers hun collectie, voortgang en stats eenvoudig kunnen delen.
-- Shorebird voor OTA-updates, zodat verbeteringen en bugfixes sneller uitgerold kunnen worden zonder telkens een volledige herinstallatie.
-
-### Gebruikte packages en API's (voorlopig)
-
-- RAWG API
-- camera
-- barcode_scanner
-- flutter_local_notifications
-- share_plus
-
-### Achievements
-
-Als extra gamificationlaag wordt een intern achievements-systeem toegevoegd. Dit systeem beloont mijlpalen op basis van het gebruik van de app en de groei van de collectie.
-
-Voorbeelden:
-
-- 100 fysieke games toegevoegd
-- Eerste online koppeling actief
-- 10 games volledig gecompleteerd
-- 30 dagen op rij activiteit in de app
-- Eerste collectie-share voltooid
-
-Deze functionaliteit versterkt de motivatie van gebruikers en maakt de app interactiever op lange termijn.
-
-## Status
-
-Deze repository bevat momenteel de concept- en planningsfase van het project. De applicatie zelf wordt verder uitgewerkt binnen het vak Smart App Development.
+```
+users/{uid}/covers/{itemId}.jpg   — aangepaste game-covers (gecomprimeerd, max 500 KB)
+```
