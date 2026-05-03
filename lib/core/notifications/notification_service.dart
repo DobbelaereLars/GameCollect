@@ -171,7 +171,11 @@ class NotificationService {
   }
 
   Future<void> cancelDailyReminder() async {
-    await _plugin.cancel(_dailyReminderId);
+    try {
+      await _plugin.cancel(_dailyReminderId);
+    } catch (_) {
+      // Negeer fouten bij het annuleren (bijv. als er geen notificatie gepland was).
+    }
   }
 
   // ── Alles annuleren ──────────────────────────────────────────────────────────
