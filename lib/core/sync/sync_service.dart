@@ -162,11 +162,17 @@ class SyncService extends ChangeNotifier {
       final sinceMs = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
       final cycleStart = DateTime.now();
 
-      // 1. Duw lokale wijzigingen (na sinceMs) naar Firestore.
-      await _pushChanges(uid, sinceMs);
-
-      // 2. Haal externe wijzigingen (na sinceMs) op uit Firestore.
+      // 1. Haal externe wijzigingen (na sinceMs) eerst op uit Firestore.
+      //    Door te pullen vóór de push worden tombstones (verwijderingen van
+      //    andere toestellen) lokaal verwerkt vóórdat we lokale data sturen.
+      //    Dit voorkomt de race waarbij een lokale push een Firestore-tombstone
+      //    overschrijft met een oudere live-versie (batch.set is unconditional).
       await _pullChanges(uid, sinceMs);
+
+      // 2. Duw lokale wijzigingen naar Firestore. Conflicten zijn al opgelost
+      //    door de pull: tombstones die nieuwer zijn dan de lokale versie zijn
+      //    al toegepast, zodat we nu de juiste (tombstone of live) versie sturen.
+      await _pushChanges(uid, sinceMs);
 
       // 3. Synchroniseer de notificatievoorkeur. Afwijkende conflictregels;
       //    buiten de rijniveau-sync gehouden.
