@@ -40,7 +40,7 @@ cp .env.example .env
 Open `.env` en vervang de placeholder:
 
 ```
-RAWG_API_KEY=jouw_sleutel_hier
+RAWG_API_KEY=949d0b59db844930b897d6086c736904
 ```
 
 ### 2. Firebase
@@ -63,7 +63,13 @@ npm install -g firebase-tools
 dart pub global activate flutterfire_cli
 ```
 
-Meld je aan en koppel het project:
+Als het `ios/Runner.xcodeproj` ontbreekt (bijv. na een verse clone), genereer het eerst opnieuw:
+
+```bash
+flutter create --platforms=ios .
+```
+
+Meld je daarna aan en koppel het project:
 
 ```bash
 firebase login
