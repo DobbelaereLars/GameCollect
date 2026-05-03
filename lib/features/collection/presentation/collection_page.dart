@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -875,12 +876,24 @@ class _GridCoverCardState extends State<_GridCoverCard> {
     return raw.replaceAll(RegExp(r'\s*\([^)]*\)$'), '').trim();
   }
 
+  /// Geeft de last-modified timestamp van een bestand terug als int.
+  /// Wordt gebruikt als ValueKey zodat Image.file altijd herlaadt als het
+  /// bestand op schijf veranderd is (zelfs bij hetzelfde pad).
+  int _fileMod(String path) {
+    try {
+      return File(path).lastModifiedSync().millisecondsSinceEpoch;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Widget _coverWidget(CollectionItem item) {
     final localPath = item.customCoverPath;
     if (localPath != null && File(localPath).existsSync()) {
       return SizedBox.expand(
         child: Image.file(
           File(localPath),
+          key: ValueKey('cover_${item.id}_${_fileMod(localPath)}'),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => _placeholder(),
@@ -889,19 +902,23 @@ class _GridCoverCardState extends State<_GridCoverCard> {
     }
     if (item.cloudCoverUrl != null) {
       return SizedBox.expand(
-        child: Image.network(
-          item.cloudCoverUrl!,
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.cloudCoverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _placeholder(),
+          errorWidget: (_, _, _) => _placeholder(),
         ),
       );
     }
     if (item.coverUrl != null) {
       return SizedBox.expand(
-        child: Image.network(
-          item.coverUrl!,
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.coverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _placeholder(),
+          errorWidget: (_, _, _) => _placeholder(),
         ),
       );
     }
@@ -1196,24 +1213,33 @@ class _CollectionListCard extends StatelessWidget {
                                 File(item.customCoverPath!).existsSync())
                             ? Image.file(
                                 File(item.customCoverPath!),
+                                key: ValueKey(() {
+                                  try {
+                                    return 'cover_list_${item.id}_${File(item.customCoverPath!).lastModifiedSync().millisecondsSinceEpoch}';
+                                  } catch (_) {
+                                    return 'cover_list_${item.id}';
+                                  }
+                                }()),
                                 fit: BoxFit.cover,
                                 gaplessPlayback: true,
                                 errorBuilder: (_, _, _) => _CoverPlaceholder(),
                               )
                             : (item.cloudCoverUrl != null
-                                  ? Image.network(
-                                      item.cloudCoverUrl!,
+                                  ? CachedNetworkImage(
+                                      fadeInDuration: Duration.zero,
+                                      fadeOutDuration: Duration.zero,
+                                      imageUrl: item.cloudCoverUrl!,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) =>
+                                      errorWidget: (_, _, _) =>
                                           _CoverPlaceholder(),
                                     )
                                   : (item.coverUrl != null
-                                        ? Image.network(
-                                            item.coverUrl!,
+                                        ? CachedNetworkImage(
+                                            fadeInDuration: Duration.zero,
+                                            fadeOutDuration: Duration.zero,
+                                            imageUrl: item.coverUrl!,
                                             fit: BoxFit.cover,
-                                            semanticLabel:
-                                                'Omslagafbeelding van ${item.title}',
-                                            errorBuilder: (_, _, _) =>
+                                            errorWidget: (_, _, _) =>
                                                 _CoverPlaceholder(),
                                           )
                                         : _CoverPlaceholder())),

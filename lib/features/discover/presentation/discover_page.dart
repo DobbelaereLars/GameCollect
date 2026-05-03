@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -653,11 +654,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           size: 34,
                           color: AppTheme.gray300,
                         )
-                      : Image.network(
-                          game.coverUrl!,
+                      : CachedNetworkImage(
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          imageUrl: game.coverUrl!,
                           fit: BoxFit.cover,
-                          semanticLabel: 'Omslagafbeelding van ${game.title}',
-                          errorBuilder: (_, _, _) => Icon(
+                          errorWidget: (_, _, _) => Icon(
                             LucideIcons.gamepad2,
                             size: 34,
                             color: AppTheme.gray300,

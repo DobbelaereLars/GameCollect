@@ -32,12 +32,20 @@ class CollectionNotifier extends ChangeNotifier {
   Future<void> reload() => _load();
 
   Future<void> _load() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // Toon alleen een loading-state bij de allereerste load (nog geen data).
+    // Achtergrondrefreshes (na DB-wijziging) updaten de data stil zodat de UI
+    // niet even leeg wordt.
+    final bool showSpinner = _items.isEmpty && _error == null;
+    if (showSpinner) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     try {
-      _items = await DatabaseHelper.instance.getCollectionItems();
+      final newItems = await DatabaseHelper.instance.getCollectionItems();
+      _items = newItems;
       _isLoading = false;
+      _error = null;
     } catch (e) {
       _error = e.toString();
       _isLoading = false;

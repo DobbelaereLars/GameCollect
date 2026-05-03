@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
@@ -240,11 +241,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 height: MediaQuery.of(context).size.height * 0.30,
                 width: double.infinity,
                 color: AppTheme.orange50,
-                child: Image.network(
-                  coverUrl,
+                child: CachedNetworkImage(
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
+                  imageUrl: coverUrl,
                   fit: BoxFit.cover,
-                  semanticLabel: 'Omslagafbeelding van ${game.title}',
-                  errorBuilder: (_, _, _) => Center(
+                  errorWidget: (_, _, _) => Center(
                     child: Icon(
                       LucideIcons.gamepad2,
                       size: 64,

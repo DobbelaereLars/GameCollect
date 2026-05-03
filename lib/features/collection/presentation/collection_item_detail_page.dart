@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -812,12 +814,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   Center(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        achievement.imageUrl!,
+                      child: CachedNetworkImage(
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        imageUrl: achievement.imageUrl!,
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
+                        errorWidget: (_, _, _) => Container(
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
@@ -1648,6 +1652,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
   late String? _cloudCoverUrl;
+  bool _isCoverUploading = false;
+  int _coverVersion = 0; // versieteller zodat Image.file altijd herladen wordt
   String _currentPlatformWithFormat = '';
   bool _hasMultiplePlatforms = false;
   List<String> _availablePlatforms = [];
@@ -1737,48 +1743,122 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     widget.onItemChanged?.call(updated);
   }
 
+  /// Comprimeert [srcPath] → [destPath] als JPEG en blijft kwaliteit verlagen
+  /// totdat het bestand onder [maxBytes] (standaard 500 KB) zit.
+  /// Werkt voor jpg, png, heic, webp en andere door flutter_image_compress
+  /// ondersteunde invoerformaten.
+  Future<String> _compressImage(
+    String srcPath,
+    String destPath, {
+    int maxBytes = 500 * 1024,
+  }) async {
+    const qualities = [80, 65, 50, 35, 20];
+
+    // Poging 1: compressAndGetFile (snelst, schrijft direct naar schijf).
+    for (final q in qualities) {
+      try {
+        final result = await FlutterImageCompress.compressAndGetFile(
+          srcPath,
+          destPath,
+          minWidth: 1280,
+          minHeight: 720,
+          quality: q,
+          format: CompressFormat.jpeg,
+          keepExif: false,
+        );
+        if (result != null && File(result.path).lengthSync() <= maxBytes) {
+          return result.path;
+        }
+      } catch (_) {
+        break; // onbekend formaat of platform-fout → naar bytes-fallback
+      }
+    }
+
+    // Poging 2: bytes-gebaseerde fallback (beter voor HEIC, WebP, PNG op iOS).
+    for (final q in qualities) {
+      try {
+        final bytes = await FlutterImageCompress.compressWithFile(
+          srcPath,
+          minWidth: 1280,
+          minHeight: 720,
+          quality: q,
+          format: CompressFormat.jpeg,
+          keepExif: false,
+        );
+        if (bytes != null) {
+          await File(destPath).writeAsBytes(bytes, flush: true);
+          if (File(destPath).lengthSync() <= maxBytes) return destPath;
+        }
+      } catch (_) {
+        break;
+      }
+    }
+
+    // Laatste noodvallback: plain copy (geen compressie, maar de upload gaat door).
+    await File(srcPath).copy(destPath);
+    return destPath;
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
-    // Kopieer naar persistente locatie zodat het pad geldig blijft na app-herstart.
-    final dir = await getApplicationDocumentsDirectory();
-    final itemId = widget.item.id;
-    final destPath = '${dir.path}/covers/$itemId.jpg';
-    await Directory('${dir.path}/covers').create(recursive: true);
-    await File(picked.path).copy(destPath);
+    // Stap 1: toon skeleton terwijl de afbeelding wordt verwerkt.
+    if (mounted) setState(() => _isCoverUploading = true);
 
-    // Upload eerst naar Firebase Storage, dan pas één keer opslaan zodat
-    // cloudCoverUrl en customCoverPath atomisch in de DB terechtkomen.
-    // Zo kan een tussentijdse app-reset nooit een "null cloudCoverUrl" achterlaten.
-    String? cloudUrl;
     try {
+      final dir = await getApplicationDocumentsDirectory();
+      final itemId = widget.item.id;
+      final destPath = '${dir.path}/covers/$itemId.jpg';
+      await Directory('${dir.path}/covers').create(recursive: true);
+
+      // Stap 2: verwijder de oude afbeelding uit Flutter's ImageCache zodat
+      // Image.file de nieuwe versie laadt en niet de gecachte oude.
+      imageCache.evict(FileImage(File(destPath)));
+      // Ook de vorige cloudCoverUrl uit de netwerk-cache verwijderen.
+      if (_cloudCoverUrl != null) {
+        await CachedNetworkImage.evictFromCache(_cloudCoverUrl!);
+      }
+
+      // Stap 3: comprimeer tot onder 500 KB.
+      final finalPath = await _compressImage(picked.path, destPath);
+
+      // Stap 4: toon de lokale afbeelding meteen — skeleton verdwijnt hier.
+      // Evict opnieuw NA het schrijven zodat Flutter de nieuw geschreven versie
+      // laadt en niet een versie die tijdens de compressie opnieuw gecachet werd.
+      imageCache.evict(FileImage(File(finalPath)));
+      if (mounted) {
+        setState(() {
+          _customCoverPath = finalPath;
+          _cloudCoverUrl = null; // reset zodat Image.file prioriteit heeft
+          _isCoverUploading = false;
+          _coverVersion++; // forceert nieuwe widget-instantie → zeker herladen
+        });
+      }
+      await _save();
+
+      // Stap 5: upload naar Storage op de achtergrond (UI staat niet te wachten).
       final uid = _currentUid();
       if (uid != null && itemId != null) {
-        final ref = FirebaseStorage.instance.ref().child(
-          'users/$uid/covers/$itemId.jpg',
-        );
-        await ref.putFile(
-          File(destPath),
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-        cloudUrl = await ref.getDownloadURL();
+        try {
+          final ref = FirebaseStorage.instance.ref().child(
+            'users/$uid/covers/$itemId.jpg',
+          );
+          await ref.putFile(
+            File(finalPath),
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          final cloudUrl = await ref.getDownloadURL();
+          if (mounted) setState(() => _cloudCoverUrl = cloudUrl);
+          await _save();
+        } catch (_) {
+          // Upload mislukt — lokale afbeelding blijft zichtbaar, cloud sync later.
+        }
       }
     } catch (_) {
-      // Upload mislukt — lokale afbeelding wordt wel opgeslagen, cloud sync later.
+      if (mounted) setState(() => _isCoverUploading = false);
     }
-
-    if (mounted) {
-      setState(() {
-        _customCoverPath = destPath;
-        _cloudCoverUrl = cloudUrl;
-      });
-    }
-    await _save();
   }
 
   Future<void> _removeCover() async {
@@ -2116,6 +2196,43 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 
   Widget _buildCoverSection() {
+    // Skeleton als er verwerkt wordt (compressie), vóór de lokale file beschikbaar is.
+    // Na compressie verdwijnt de skeleton en toont de lokale afbeelding meteen.
+    if (_isCoverUploading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: _CoverUploadingSkeleton(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: null, // uitgeschakeld tijdens verwerking
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.orange300,
+              side: const BorderSide(color: AppTheme.orange300),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(LucideIcons.imagePlus, size: 18),
+            label: const Text(
+              'Kies uit galerij',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     late Widget coverWidget;
     if (_customCoverPath != null) {
       coverWidget = ClipRRect(
@@ -2127,6 +2244,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
             children: [
               Image.file(
                 File(_customCoverPath!),
+                key: ValueKey('cover_local_$_coverVersion'),
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
                 errorBuilder: (_, _, _) => _buildCoverFallback(),
@@ -2173,10 +2291,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                _cloudCoverUrl!,
+              CachedNetworkImage(
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                imageUrl: _cloudCoverUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => _buildCoverFallback(),
+                errorWidget: (_, _, _) => _buildCoverFallback(),
               ),
               Positioned(
                 left: 0,
@@ -2217,10 +2337,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         borderRadius: BorderRadius.circular(12),
         child: AspectRatio(
           aspectRatio: 16 / 9,
-          child: Image.network(
-            widget.item.coverUrl!,
+          child: CachedNetworkImage(
+            fadeInDuration: Duration.zero,
+            fadeOutDuration: Duration.zero,
+            imageUrl: widget.item.coverUrl!,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => _buildCoverFallback(),
+            errorWidget: (_, _, _) => _buildCoverFallback(),
           ),
         ),
       );
@@ -2813,17 +2935,21 @@ class _GameDetailHeader extends StatelessWidget {
                         errorBuilder: (_, _, _) => const _CoverPlaceholder(),
                       )
                     : (item.cloudCoverUrl != null
-                          ? Image.network(
-                              item.cloudCoverUrl!,
+                          ? CachedNetworkImage(
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              imageUrl: item.cloudCoverUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
+                              errorWidget: (_, _, _) =>
                                   const _CoverPlaceholder(),
                             )
                           : (item.coverUrl != null
-                                ? Image.network(
-                                    item.coverUrl!,
+                                ? CachedNetworkImage(
+                                    fadeInDuration: Duration.zero,
+                                    fadeOutDuration: Duration.zero,
+                                    imageUrl: item.coverUrl!,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) =>
+                                    errorWidget: (_, _, _) =>
                                         const _CoverPlaceholder(),
                                   )
                                 : const _CoverPlaceholder())),
@@ -3297,12 +3423,14 @@ class _AchievementTile extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: achievement.imageUrl != null
-                          ? Image.network(
-                              achievement.imageUrl!,
+                          ? CachedNetworkImage(
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              imageUrl: achievement.imageUrl!,
                               width: 36,
                               height: 36,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
+                              errorWidget: (_, _, _) =>
                                   const _AchievementImagePlaceholder(),
                             )
                           : const _AchievementImagePlaceholder(),
@@ -3785,6 +3913,71 @@ class _RequirementsSectionState extends State<_RequirementsSection> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Pulserende skeleton die getoond wordt terwijl een cover wordt geüpload.
+class _CoverUploadingSkeleton extends StatefulWidget {
+  const _CoverUploadingSkeleton();
+
+  @override
+  State<_CoverUploadingSkeleton> createState() =>
+      _CoverUploadingSkeletonState();
+}
+
+class _CoverUploadingSkeletonState extends State<_CoverUploadingSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        color: AppTheme.orange50.withValues(alpha: _anim.value),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: AppTheme.orange500,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Afbeelding uploaden\u2026',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.orange700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

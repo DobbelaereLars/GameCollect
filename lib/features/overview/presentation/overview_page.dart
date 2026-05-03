@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -723,7 +724,7 @@ class _HorizontalGroupList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Extra 16 px reserved for dot indicators (always, so covers are uniform).
-    final double height = showProgress ? 226 : 210;
+    const double height = 210;
     return SizedBox(
       height: height,
       child: ListView.builder(
@@ -826,12 +827,24 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     return raw.replaceAll(RegExp(r'\s*\([^)]*\)$'), '').trim();
   }
 
+  /// Geeft de last-modified timestamp van een bestand terug als int.
+  /// Wordt gebruikt als ValueKey zodat Image.file altijd herlaadt als het
+  /// bestand op schijf veranderd is (zelfs bij hetzelfde pad).
+  int _fileMod(String path) {
+    try {
+      return File(path).lastModifiedSync().millisecondsSinceEpoch;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Widget _coverWidget(CollectionItem item) {
     final localPath = item.customCoverPath;
     if (localPath != null && File(localPath).existsSync()) {
       return SizedBox.expand(
         child: Image.file(
           File(localPath),
+          key: ValueKey('cover_${item.id}_${_fileMod(localPath)}'),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (ctx, err, stack) => Center(
@@ -846,10 +859,12 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     }
     if (item.cloudCoverUrl != null) {
       return SizedBox.expand(
-        child: Image.network(
-          item.cloudCoverUrl!,
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.cloudCoverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (ctx, err, stack) => Center(
+          errorWidget: (ctx, url, err) => Center(
             child: Icon(
               LucideIcons.gamepad2,
               size: 32,
@@ -861,10 +876,12 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     }
     if (item.coverUrl != null) {
       return SizedBox.expand(
-        child: Image.network(
-          item.coverUrl!,
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.coverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (ctx, err, stack) => Center(
+          errorWidget: (ctx, url, err) => Center(
             child: Icon(
               LucideIcons.gamepad2,
               size: 32,
@@ -1069,12 +1086,6 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                     )
                   : const SizedBox.shrink(),
             ),
-
-            // Progress bar
-            if (widget.showProgress) ...[
-              const SizedBox(height: 6),
-              _MiniProgressBar(ratio: current.progressRatio),
-            ],
           ],
         ),
       ),
@@ -1293,10 +1304,12 @@ class _TrendingGameCard extends StatelessWidget {
             Container(
               color: AppTheme.orange50,
               child: game.coverUrl != null
-                  ? Image.network(
-                      game.coverUrl!,
+                  ? CachedNetworkImage(
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      imageUrl: game.coverUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (ctx, error, stack) => Center(
+                      errorWidget: (ctx, url, error) => Center(
                         child: Icon(
                           LucideIcons.gamepad2,
                           size: 32,

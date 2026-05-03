@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -145,12 +146,14 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: achievement.imageUrl != null
-                            ? Image.network(
-                                achievement.imageUrl!,
+                            ? CachedNetworkImage(
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                imageUrl: achievement.imageUrl!,
                                 width: 36,
                                 height: 36,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => _placeholder(),
+                                errorWidget: (_, _, _) => _placeholder(),
                               )
                             : _placeholder(),
                       ),
