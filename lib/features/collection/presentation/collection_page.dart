@@ -876,10 +876,11 @@ class _GridCoverCardState extends State<_GridCoverCard> {
   }
 
   Widget _coverWidget(CollectionItem item) {
-    if (item.customCoverPath != null) {
+    final localPath = item.customCoverPath;
+    if (localPath != null && File(localPath).existsSync()) {
       return SizedBox.expand(
         child: Image.file(
-          File(item.customCoverPath!),
+          File(localPath),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => _placeholder(),
@@ -1191,7 +1192,8 @@ class _CollectionListCard extends StatelessWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        item.customCoverPath != null
+                        (item.customCoverPath != null &&
+                                File(item.customCoverPath!).existsSync())
                             ? Image.file(
                                 File(item.customCoverPath!),
                                 fit: BoxFit.cover,

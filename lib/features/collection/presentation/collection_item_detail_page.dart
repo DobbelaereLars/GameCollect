@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:confetti/confetti.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
@@ -1658,8 +1659,15 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   void initState() {
     super.initState();
     _isManuallyCompleted = widget.item.isManuallyCompleted;
-    _customCoverPath = widget.item.customCoverPath;
     _cloudCoverUrl = widget.item.cloudCoverUrl;
+    // Valideer het lokale pad: als het bestand verdwenen is (bijv. temp-pad
+    // na app-herstart), zet naar null zodat de cloudCoverUrl fallback werkt.
+    final savedPath = widget.item.customCoverPath;
+    if (savedPath != null && File(savedPath).existsSync()) {
+      _customCoverPath = savedPath;
+    } else {
+      _customCoverPath = null;
+    }
     _currentPlatformWithFormat = widget.platformWithFormat;
     _confettiController = ConfettiController(
       duration: const Duration(seconds: 2),
@@ -1736,22 +1744,27 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
       imageQuality: 85,
     );
     if (picked == null) return;
-    setState(() {
-      _customCoverPath = picked.path;
-    });
+
+    // Kopieer naar persistente locatie zodat het pad geldig blijft na app-herstart.
+    final dir = await getApplicationDocumentsDirectory();
+    final itemId = widget.item.id;
+    final destPath = '${dir.path}/covers/$itemId.jpg';
+    await Directory('${dir.path}/covers').create(recursive: true);
+    await File(picked.path).copy(destPath);
+
+    setState(() => _customCoverPath = destPath);
     // Sla lokaal op zodat de UI direct reageert.
     await _save();
     // Upload naar Firebase Storage op de achtergrond.
     try {
       final uid = _currentUid();
       if (uid != null) {
-        final itemId = widget.item.id;
         if (itemId == null) return;
         final ref = FirebaseStorage.instance.ref().child(
           'users/$uid/covers/$itemId.jpg',
         );
         await ref.putFile(
-          File(picked.path),
+          File(destPath),
           SettableMetadata(contentType: 'image/jpeg'),
         );
         final url = await ref.getDownloadURL();
@@ -2751,7 +2764,8 @@ class _GameDetailHeader extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                item.customCoverPath != null
+                (item.customCoverPath != null &&
+                        File(item.customCoverPath!).existsSync())
                     ? Image.file(
                         File(item.customCoverPath!),
                         fit: BoxFit.cover,
