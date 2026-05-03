@@ -1,9 +1,12 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 
+/// Beheerpagina voor achievements die niet meegeteld worden.
+/// Toont alle achievements met opties om ze als voltooid te markeren of in te schakelen.
 class DisabledAchievementsPage extends StatefulWidget {
   const DisabledAchievementsPage({
     super.key,
@@ -12,8 +15,13 @@ class DisabledAchievementsPage extends StatefulWidget {
     required this.onToggleEnabled,
   });
 
+  /// Initiële lijst van achievements met hun huidige status.
   final List<GameAchievementWithState> initialAchievements;
+
+  /// Callback om een achievement als voltooid/niet-voltooid te markeren.
   final Future<void> Function(int rawgId, bool value) onToggleCompleted;
+
+  /// Callback om een achievement in of uit te schakelen (niet meer meetellen).
   final Future<void> Function(int rawgId, bool enabled) onToggleEnabled;
 
   @override
@@ -32,6 +40,7 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
     );
   }
 
+  /// Bouwt een placeholder-icoon voor achievements zonder afbeelding.
   Widget _placeholder() {
     return Container(
       width: 36,
@@ -137,12 +146,14 @@ class _DisabledAchievementsPageState extends State<DisabledAchievementsPage> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: achievement.imageUrl != null
-                            ? Image.network(
-                                achievement.imageUrl!,
+                            ? CachedNetworkImage(
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                imageUrl: achievement.imageUrl!,
                                 width: 36,
                                 height: 36,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _placeholder(),
+                                errorWidget: (_, _, _) => _placeholder(),
                               )
                             : _placeholder(),
                       ),

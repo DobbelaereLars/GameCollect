@@ -8,10 +8,11 @@ import '../../../core/theme/app_theme.dart';
 
 enum AuthMode { signIn, register }
 
-/// Shared login + register screen. Toggles between modes via tab switcher.
+/// Gecombineerd aanmeld- en registratiescherm. Schakelt tussen modi via een tabkiezer.
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key, this.initialMode = AuthMode.signIn});
 
+  /// Initieel weergegeven modus (aanmelden of registreren).
   final AuthMode initialMode;
 
   @override
@@ -20,9 +21,15 @@ class AuthPage extends StatefulWidget {
 
 class _AuthPageState extends State<AuthPage> {
   late AuthMode _mode = widget.initialMode;
+  final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _passwordFocusNode = FocusNode();
+
+  // Indicator: wordt geactiveerd tijdens het versturen van het formulier.
   bool _isSubmitting = false;
+
+  // Wachtwoord verbergen of tonen.
   bool _obscure = true;
   String? _error;
 
@@ -30,20 +37,15 @@ class _AuthPageState extends State<AuthPage> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
+  /// Valideert het formulier en roept de juiste Firebase-authenticatiemethode aan.
   Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Vul je e-mailadres en wachtwoord in.');
-      return;
-    }
-    if (password.length < 6) {
-      setState(() => _error = 'Wachtwoord moet minstens 6 tekens bevatten.');
-      return;
-    }
 
     setState(() {
       _isSubmitting = true;
@@ -51,6 +53,9 @@ class _AuthPageState extends State<AuthPage> {
     });
 
     try {
+      // Onderdruk automatische sync tijdens de aanmeldflow zodat de
+      // strategiedialoog kans krijgt vóór enige synchronisatie.
+      SyncService.instance.suppressAutoSync();
       if (_mode == AuthMode.signIn) {
         await AuthService.instance.signIn(email: email, password: password);
       } else {
@@ -59,12 +64,12 @@ class _AuthPageState extends State<AuthPage> {
 
       if (!mounted) return;
 
-      // After sign-in: ask the user how to reconcile local + cloud data,
-      // but only when BOTH sides actually have data. In all other cases the
-      // outcome is unambiguous (one-way push or pull) and we just sync.
-      // - Register: cloud is brand new → never ask.
-      // - Sign-in with empty local → just pull cloud → no question.
-      // - Sign-in with empty cloud → just push local → no question.
+      // Na aanmelden: vraag de gebruiker hoe lokale en clouddata te combineren,
+      // maar alleen als BEIDE kanten data bevatten. In alle andere gevallen is
+      // de uitkomst eenduidig (eenrichtings push of pull) en wordt direct gesynchroniseerd.
+      // - Registreren: cloud is nieuw → nooit vragen.
+      // - Aanmelden met lege lokale data → alleen cloud ophalen → geen vraag.
+      // - Aanmelden met lege cloud → alleen lokaal pushen → geen vraag.
       final uid = AuthService.instance.uid;
       if (uid != null) {
         InitialSyncStrategy strategy = InitialSyncStrategy.merge;
@@ -74,8 +79,8 @@ class _AuthPageState extends State<AuthPage> {
           if (hasLocal && hasRemote && mounted) {
             final chosen = await _showStrategyDialog(context);
             if (chosen == null) {
-              // User cancelled — sign back out so we don't leave them in
-              // a half-applied state.
+              // Gebruiker heeft geannuleerd — opnieuw uitloggen zodat er geen
+              // half-uitgevoerde status achterblijft.
               await AuthService.instance.signOut();
               if (!mounted) return;
               setState(() => _isSubmitting = false);
@@ -94,30 +99,26 @@ class _AuthPageState extends State<AuthPage> {
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
+      SyncService.instance.resumeAutoSync();
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  String _humanReadableError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'Ongeldig e-mailadres.';
-      case 'user-disabled':
-        return 'Dit account is uitgeschakeld.';
-      case 'user-not-found':
-      case 'invalid-credential':
-      case 'wrong-password':
-        return 'E-mailadres of wachtwoord klopt niet.';
-      case 'email-already-in-use':
-        return 'Er bestaat al een account met dit e-mailadres.';
-      case 'weak-password':
-        return 'Kies een sterker wachtwoord.';
-      case 'network-request-failed':
-        return 'Geen internetverbinding.';
-      default:
-        return e.message ?? 'Er is iets misgegaan.';
-    }
-  }
+  // Vertaaltabel van Firebase-foutcodes naar leesbare Nederlandse meldingen.
+  static const _firebaseErrors = {
+    'invalid-email': 'Ongeldig e-mailadres.',
+    'user-disabled': 'Dit account is uitgeschakeld.',
+    'user-not-found': 'E-mailadres of wachtwoord klopt niet.',
+    'invalid-credential': 'E-mailadres of wachtwoord klopt niet.',
+    'wrong-password': 'E-mailadres of wachtwoord klopt niet.',
+    'email-already-in-use': 'Er bestaat al een account met dit e-mailadres.',
+    'weak-password': 'Kies een sterker wachtwoord.',
+    'network-request-failed': 'Geen internetverbinding.',
+  };
+
+  /// Vertaalt een Firebase-foutcode naar een leesbare Nederlandse foutmelding.
+  String _humanReadableError(FirebaseAuthException e) =>
+      _firebaseErrors[e.code] ?? e.message ?? 'Er is iets misgegaan.';
 
   @override
   Widget build(BuildContext context) {
@@ -160,26 +161,59 @@ class _AuthPageState extends State<AuthPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              _buildField(
-                controller: _emailCtrl,
-                hint: 'E-mailadres',
-                icon: LucideIcons.mail,
-                keyboard: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              _buildField(
-                controller: _passwordCtrl,
-                hint: 'Wachtwoord',
-                icon: LucideIcons.lock,
-                obscure: _obscure,
-                suffix: IconButton(
-                  splashRadius: 18,
-                  icon: Icon(
-                    _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-                    size: 18,
-                    color: AppTheme.gray500,
-                  ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    _buildField(
+                      controller: _emailCtrl,
+                      hint: 'E-mailadres',
+                      icon: LucideIcons.mail,
+                      keyboard: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_passwordFocusNode),
+                      validator: (v) {
+                        final val = v?.trim() ?? '';
+                        if (val.isEmpty) return 'Vul je e-mailadres in.';
+                        final emailRegex = RegExp(
+                          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                        );
+                        if (!emailRegex.hasMatch(val)) {
+                          return 'Ongeldig e-mailadres.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildField(
+                      controller: _passwordCtrl,
+                      hint: 'Wachtwoord',
+                      icon: LucideIcons.lock,
+                      obscure: _obscure,
+                      focusNode: _passwordFocusNode,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      validator: (v) {
+                        final val = v ?? '';
+                        if (val.isEmpty) return 'Vul je wachtwoord in.';
+                        if (val.length < 6) {
+                          return 'Wachtwoord moet minstens 6 tekens bevatten.';
+                        }
+                        return null;
+                      },
+                      suffix: IconButton(
+                        splashRadius: 18,
+                        icon: Icon(
+                          _obscure ? LucideIcons.eye : LucideIcons.eyeOff,
+                          size: 18,
+                          color: AppTheme.gray500,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (_error != null) ...[
@@ -245,6 +279,7 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
+  /// Stuurt een wachtwoord-resetmail naar het ingevulde e-mailadres.
   Future<void> _sendPasswordReset(BuildContext context) async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
@@ -266,6 +301,7 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
+  /// Bouwt de tabkiezer om te schakelen tussen aanmelden en registreren.
   Widget _buildModeSwitcher() {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -282,6 +318,7 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
+  /// Bouwt een individueel tabblad in de moduskiezer.
   Widget _buildModeTab(String label, AuthMode mode) {
     final selected = _mode == mode;
     return GestureDetector(
@@ -310,6 +347,7 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
+  /// Bouwt een formulierveld met icoon, validator en optioneel achtervoegsel.
   Widget _buildField({
     required TextEditingController controller,
     required String hint,
@@ -317,41 +355,71 @@ class _AuthPageState extends State<AuthPage> {
     bool obscure = false,
     Widget? suffix,
     TextInputType? keyboard,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
+    String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(999),
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      obscureText: obscure,
+      keyboardType: keyboard,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
+      autocorrect: false,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: validator,
+      style: TextStyle(
+        fontFamily: 'Manrope',
+        fontSize: 16,
+        color: AppTheme.black,
       ),
-      child: TextField(
-        controller: controller,
-        obscureText: obscure,
-        keyboardType: keyboard,
-        autocorrect: false,
-        style: TextStyle(
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 16,
-          color: AppTheme.black,
+          color: AppTheme.gray500,
         ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 16,
-            color: AppTheme.gray500,
-          ),
-          prefixIcon: Icon(icon, size: 20, color: AppTheme.orange500),
-          suffixIcon: suffix,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        prefixIcon: Icon(icon, size: 20, color: AppTheme.orange500),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: AppTheme.orange50,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: AppTheme.orange500, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: Color(0xFFB84C00), width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(999),
+          borderSide: const BorderSide(color: Color(0xFFB84C00), width: 1.5),
+        ),
+        errorStyle: const TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 12,
+          color: Color(0xFFB84C00),
         ),
       ),
     );
   }
 }
 
-// ── Strategy dialog ──────────────────────────────────────────────────────────
+// ── Strategiedialoog ─────────────────────────────────────────────────────────────
 
+/// Toont een dialoog om de initiële synchronisatiestrategie te kiezen na aanmelding.
 Future<InitialSyncStrategy?> _showStrategyDialog(BuildContext context) {
   return showDialog<InitialSyncStrategy>(
     context: context,
@@ -418,6 +486,7 @@ Future<InitialSyncStrategy?> _showStrategyDialog(BuildContext context) {
   );
 }
 
+/// Weergave-widget voor een keuze in het synchronisatiestrategiedialoog.
 class _StrategyAction extends StatelessWidget {
   const _StrategyAction({
     required this.icon,

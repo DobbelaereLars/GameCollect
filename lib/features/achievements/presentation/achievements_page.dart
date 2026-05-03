@@ -6,9 +6,11 @@ import '../../../core/theme/app_theme.dart';
 import '../data/app_achievement_service.dart';
 import '../domain/app_achievement.dart';
 
+/// Overzichtspagina voor alle app-achievements: geeft voortgang en detail-dialogen.
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
 
+  /// Signaal om de lijst terug naar boven te scrollen (bijv. bij dubbel tappen op de tab).
   static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
@@ -21,13 +23,14 @@ class _AchievementsPageState extends State<AchievementsPage> {
   bool _isLoading = true;
   int _loadGeneration = 0;
 
+  /// Initialiseert de pagina: laadt achievement-voortgang en registreert listeners.
   @override
   void initState() {
     super.initState();
     _load();
     DatabaseHelper.instance.addListener(_onCollectionChanged);
     AchievementsPage.scrollToTopRequest.addListener(_onScrollToTop);
-    // When the shell unlocks achievements, we also refresh unread state
+    // Als de shell achievements ontgrendelt, wordt de lijst ook ververst.
     AppAchievementService.newlyUnlockedNotifier.addListener(
       _onCollectionChanged,
     );
@@ -44,6 +47,7 @@ class _AchievementsPageState extends State<AchievementsPage> {
     super.dispose();
   }
 
+  /// Scrollt de lijst naar boven als het signaal wordt ontvangen.
   void _onScrollToTop() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -54,10 +58,12 @@ class _AchievementsPageState extends State<AchievementsPage> {
     }
   }
 
+  /// Herlaadt de voortgang als de collectie gewijzigd is.
   void _onCollectionChanged() {
     _load();
   }
 
+  /// Laadt de achievement-voortgang vanuit de database en markeert nieuwe als gezien.
   Future<void> _load() async {
     final generation = ++_loadGeneration;
     final items = await DatabaseHelper.instance.getCollectionItems();
@@ -66,14 +72,14 @@ class _AchievementsPageState extends State<AchievementsPage> {
     final progress = await AppAchievementService.instance.getProgress(items);
     if (!mounted || generation != _loadGeneration) return;
 
-    // Mark newly seen achievements as seen when user opens this page
+    // Markeer nieuw ontgrendelde achievements als gezien zodra de gebruiker deze pagina opent.
     if (_progress.isEmpty || progress.any((p) => p.isNew)) {
       for (final p in progress.where((p) => p.isNew)) {
         await DatabaseHelper.instance.markAppAchievementSeen(p.achievement.id);
       }
     }
 
-    // Reload after marking seen so the "Nieuw" badges disappear
+    // Herlaad na markering zodat de 'Nieuw'-badges verdwijnen.
     final refreshed = await AppAchievementService.instance.getProgress(items);
     if (!mounted || generation != _loadGeneration) return;
 
@@ -83,9 +89,13 @@ class _AchievementsPageState extends State<AchievementsPage> {
     });
   }
 
+  /// Aantal behaalde achievements.
   int get _unlockedCount => _progress.where((p) => p.isUnlocked).length;
+
+  /// Totaal aantal beschikbare achievements.
   int get _totalCount => AppAchievement.all.length;
 
+  /// Toont het detaildialoog voor een achievement.
   void _showDetail(BuildContext context, AppAchievementProgress p) {
     final achievement = p.achievement;
     final isUnlocked = p.isUnlocked;
@@ -352,7 +362,7 @@ class _AchievementRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              // Badge icon
+              // Badge-icoon voor het achievement.
               SizedBox(
                 width: 40,
                 height: 40,
@@ -369,7 +379,7 @@ class _AchievementRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 14),
-              // Title + progress
+              // Titel en voortgangsindicator.
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -413,7 +423,7 @@ class _AchievementRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Status indicator
+              // Statusindicator: vinkje als behaald, slot als nog niet behaald.
               if (isUnlocked)
                 const Icon(
                   LucideIcons.circleCheck,

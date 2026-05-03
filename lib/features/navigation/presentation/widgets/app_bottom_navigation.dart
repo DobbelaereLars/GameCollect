@@ -6,6 +6,8 @@ import '../../../../core/theme/app_theme.dart';
 
 import '../../domain/navigation_tab.dart';
 
+/// Onderste navigatiebalk met glazen achtergrond (backdrop blur).
+/// Toont één item per [NavigationTab] en roept [onTap] aan bij selectie.
 class AppBottomNavigation extends StatelessWidget {
   const AppBottomNavigation({
     required this.currentIndex,
@@ -14,10 +16,16 @@ class AppBottomNavigation extends StatelessWidget {
     super.key,
   });
 
+  /// Index van de momenteel actieve tab.
   final int currentIndex;
+
+  /// Lijst van tabs die getoond worden.
   final List<NavigationTab> tabs;
+
+  /// Callback die wordt aangeroepen als de gebruiker op een tab tikt.
   final ValueChanged<int> onTap;
 
+  /// Bouwt de navigatiebalk met blur-effect en oranje accentkleur.
   @override
   Widget build(BuildContext context) {
     return ClipRect(

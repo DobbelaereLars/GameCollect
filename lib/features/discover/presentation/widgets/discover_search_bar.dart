@@ -3,6 +3,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 
+/// Zoekbalk voor de Ontdekken-pagina. Bevat een tekstveld, een wis-knop
+/// en optioneel een camera-knop voor het scannen van game-covers.
 class DiscoverSearchBar extends StatelessWidget {
   const DiscoverSearchBar({
     required this.controller,
@@ -16,15 +18,31 @@ class DiscoverSearchBar extends StatelessWidget {
     super.key,
   });
 
+  /// Controller voor de invoertekst.
   final TextEditingController controller;
+
+  /// Wordt aangeroepen bij elke tekstwijziging.
   final ValueChanged<String> onChanged;
+
+  /// Wordt aangeroepen als de gebruiker op de zoek-actieknop drukt.
   final ValueChanged<String> onSubmitted;
+
+  /// Wist de huidige zoekterm.
   final VoidCallback onClearPressed;
+
+  /// Geeft aan of de camera-knop zichtbaar moet zijn.
   final bool showCameraButton;
+
+  /// Wordt aangeroepen als de gebruiker op de camera-knop drukt.
   final VoidCallback onCameraPressed;
+
+  /// Geeft aan of de camera bezig is (toont dan een laadindicator).
   final bool isCameraBusy;
+
+  /// Geeft aan of de camera-knop uitgeschakeld moet zijn.
   final bool isCameraDisabled;
 
+  /// Bouwt de rij met zoektekstveld en optionele camera-knop.
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;

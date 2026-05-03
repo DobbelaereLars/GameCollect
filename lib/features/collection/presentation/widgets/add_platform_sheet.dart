@@ -4,6 +4,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../domain/collection_item.dart';
 
+/// Bottomsheet om een extra platform toe te voegen aan een bestaand collectie-item.
+/// Doorloopt dezelfde stappen als [AddToCollectionSheet]: platformkeuze → formaatkeuze → opslaan.
 class AddPlatformSheet extends StatefulWidget {
   const AddPlatformSheet({
     super.key,
@@ -12,10 +14,16 @@ class AddPlatformSheet extends StatefulWidget {
     this.onAdded,
   });
 
+  /// Het bestaande collectie-item waaraan een platform toegevoegd wordt.
   final CollectionItem item;
+
+  /// Platforms die de gebruiker nog niet bezit (en dus kan toevoegen).
   final List<String> unownedPlatforms;
+
+  /// Optionele callback die aangeroepen wordt na succesvol toevoegen.
   final VoidCallback? onAdded;
 
+  /// Toont de sheet als modaal bottomsheet bovenop de huidige pagina.
   static Future<void> show(
     BuildContext context, {
     required CollectionItem item,
@@ -49,6 +57,7 @@ class _AddPlatformSheetState extends State<AddPlatformSheet> {
   final Map<String, String> _platformFormats = {};
   bool _isSaving = false;
 
+  /// Slaat de geselecteerde platforms op als nieuwe collectie-items.
   Future<void> _saveToCollection() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);

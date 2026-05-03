@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -8,11 +8,15 @@ import '../../domain/collection_item.dart';
 import '../../../discover/data/rawg_games_api.dart';
 import '../../../discover/domain/rawg_game.dart';
 
+/// Bottomsheet waarmee een game aan de collectie toegevoegd kan worden.
+/// Doorloopt stappen: platformkeuze → formaatkeuze → opslaan.
 class AddToCollectionSheet extends StatefulWidget {
+  /// Het RAWG-speldetailobject dat toegevoegd wordt.
   final RawgGameDetails game;
 
   const AddToCollectionSheet({super.key, required this.game});
 
+  /// Toont de sheet als een modaal bottomsheet bovenop de huidige pagina.
   static Future<void> show(BuildContext context, RawgGameDetails game) {
     return showModalBottomSheet(
       context: context,
@@ -43,6 +47,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
   final Map<String, String> _platformFormats = {};
   bool _isSaving = false;
 
+  /// Als er slechts één platform beschikbaar is, sla dan de platformkeuzestap over.
   @override
   void initState() {
     super.initState();
@@ -51,11 +56,12 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       _selectedPlatforms.add(platform);
       _platformsToFormat = [platform];
       _platformFormats[platform] = 'Fysiek';
-      // Skip to format screen if only 1 platform
+      // Sla over naar het formaatscherm als er maar 1 platform is.
       _currentStep = 1;
     }
   }
 
+  /// Slaat de geselecteerde game op als nieuw(e) collectie-item(s) per platform en formaat.
   Future<void> _saveToCollection() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -67,7 +73,7 @@ class _AddToCollectionSheetState extends State<AddToCollectionSheet> {
       }).toList();
 
       List<AchievementState> initialStates = const [];
-      final rawgApiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      final rawgApiKey = SecureStorageService.rawgApiKey;
       if (rawgApiKey.isNotEmpty) {
         final hasAchievements = await DatabaseHelper.instance
             .hasAchievementsForGame(widget.game.id);

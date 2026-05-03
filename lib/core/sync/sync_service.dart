@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,29 +12,29 @@ import '../notifications/notification_service.dart';
 import 'auth_service.dart';
 import 'connectivity_service.dart';
 
-/// What to do when a user signs in on a device that already has local data
-/// AND a cloud document set.
+/// Wat te doen als een gebruiker inlogt op een toestel dat al lokale data heeft
+/// EN er al clouddata aanwezig is.
 enum InitialSyncStrategy {
-  /// Push everything local to the cloud, replacing any cloud data.
+  /// Stuur alles lokaal naar de cloud, vervangt eventuele clouddata.
   overwriteCloud,
 
-  /// Wipe local data, then pull everything from the cloud.
+  /// Wis lokale data en haal alles op uit de cloud.
   overwriteLocal,
 
-  /// Bidirectional last-write-wins merge across both sides.
+  /// Bidirectionele last-write-wins-samenvoeging over beide kanten.
   merge,
 }
 
-/// Coordinates bidirectional sync between the local SQLite database and
-/// Firestore. Last-write-wins per record using `updatedAt` (epoch ms).
+/// Coördineert bidirectionele synchronisatie tussen de lokale SQLite-database en
+/// Firestore. Last-write-wins per record op basis van `updatedAt` (epoch ms).
 ///
-/// Runs only when:
-///  - Firebase is configured (Firebase.apps not empty)
-///  - The user is signed in
-///  - Connectivity is online
+/// Actief alleen wanneer:
+///  - Firebase geconfigureerd is (Firebase.apps niet leeg)
+///  - De gebruiker is ingelogd
+///  - Er een internetverbinding is
 ///
-/// Otherwise no-ops and exposes [pendingChanges] so the UI can communicate
-/// "X wijzigingen wachten op verbinding".
+/// Anders no-op en stelt [pendingChanges] beschikbaar zodat de UI
+/// "X wijzigingen wachten op verbinding" kan tonen.
 class SyncService extends ChangeNotifier {
   SyncService._();
   static final SyncService instance = SyncService._();
@@ -45,13 +48,24 @@ class SyncService extends ChangeNotifier {
   Timer? _autoSyncTimer;
   bool _wired = false;
 
+  /// Wanneer true wordt de automatische sync na auth/connectiviteitswijzigingen
+  /// onderdrukt. Gebruik dit tijdens de aanmeldflow om een vroegtijdige sync
+  /// vóór de strategiekeuze te voorkomen.
+  bool _suppressAutoSync = false;
+
+  /// Onderdruk automatische sync tijdelijk (bijv. tijdens aanmeldflow).
+  void suppressAutoSync() => _suppressAutoSync = true;
+
+  /// Herstel automatische sync na handmatige syncafhandeling.
+  void resumeAutoSync() => _suppressAutoSync = false;
+
   bool get isSyncing => _isSyncing;
   String? get lastError => _lastError;
   DateTime? get lastSyncAt => _lastSyncAt;
   int get pendingChanges => _pendingChanges;
 
-  /// Wires up listeners. Call once after Firebase + Auth + Connectivity
-  /// have been initialized.
+  /// Koppelt luisteraars. Eenmalig aanroepen nadat Firebase, Auth en Connectivity
+  /// zijn geïnitialiseerd.
   Future<void> wire() async {
     if (_wired) return;
     _wired = true;
@@ -69,22 +83,26 @@ class SyncService extends ChangeNotifier {
     ConnectivityService.instance.addListener(_onAuthOrConnectivityChange);
   }
 
+  /// Reageert op lokale databasewijzigingen: herlaadt pending count en plant autosync.
   void _onLocalChange() {
     _refreshPendingCount();
     _scheduleAutoSync();
   }
 
+  /// Reageert op wijzigingen in authenticatie of connectiviteit: start sync indien mogelijk.
   void _onAuthOrConnectivityChange() {
     _refreshPendingCount();
+    if (_suppressAutoSync) return;
     if (AuthService.instance.isSignedIn &&
         ConnectivityService.instance.isOnline) {
-      // Fire-and-forget; errors are surfaced via [lastError].
+      // Achtergrond uitvoeren; fouten worden via [lastError] zichtbaar gemaakt.
       unawaited(syncNow());
     } else {
       notifyListeners();
     }
   }
 
+  /// Plant een debounced autosync van 2 seconden na elke lokale wijziging.
   void _scheduleAutoSync() {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = Timer(const Duration(seconds: 2), () {
@@ -95,29 +113,34 @@ class SyncService extends ChangeNotifier {
     });
   }
 
+  /// Herlaadt het aantal niet-gesynchroniseerde lokale wijzigingen.
   Future<void> _refreshPendingCount() async {
-    final since = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
-    final count = await DatabaseHelper.instance.countLocalChangesSince(since);
-    if (count != _pendingChanges) {
-      _pendingChanges = count;
-      notifyListeners();
+    try {
+      final since = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
+      final count = await DatabaseHelper.instance.countLocalChangesSince(since);
+      if (count != _pendingChanges) {
+        _pendingChanges = count;
+        notifyListeners();
+      }
+    } catch (_) {
+      // DB is mogelijk gesloten tijdens app-reset; stil negeren.
     }
   }
 
-  /// True when sync infrastructure is callable (Firebase + Auth + Online).
+  /// True als de sync-infrastructuur beschikbaar is (Firebase + Auth + Online).
   bool get canSync =>
       Firebase.apps.isNotEmpty &&
       AuthService.instance.isSignedIn &&
       ConnectivityService.instance.isOnline;
 
-  /// Run a full bidirectional sync. Safe to call repeatedly.
+  /// Voert een volledige bidirectionele sync uit. Veilig om meerdere keren aan te roepen.
   Future<bool> syncNow({InitialSyncStrategy? strategy}) async {
     if (_isSyncing) return false;
     if (Firebase.apps.isEmpty) return false;
     final uid = AuthService.instance.uid;
     if (uid == null) return false;
     if (!ConnectivityService.instance.isOnline) {
-      // Recheck once before giving up — connectivity events can lag.
+      // Hercontroleer één keer vóór opgave — connectiviteitsgebeurtenissen kunnen vertraagd zijn.
       final ok = await ConnectivityService.instance.recheck();
       if (!ok) return false;
     }
@@ -139,14 +162,20 @@ class SyncService extends ChangeNotifier {
       final sinceMs = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
       final cycleStart = DateTime.now();
 
-      // 1. Push local changes (after sinceMs) to Firestore.
-      await _pushChanges(uid, sinceMs);
-
-      // 2. Pull remote changes (after sinceMs) from Firestore.
+      // 1. Haal externe wijzigingen (na sinceMs) eerst op uit Firestore.
+      //    Door te pullen vóór de push worden tombstones (verwijderingen van
+      //    andere toestellen) lokaal verwerkt vóórdat we lokale data sturen.
+      //    Dit voorkomt de race waarbij een lokale push een Firestore-tombstone
+      //    overschrijft met een oudere live-versie (batch.set is unconditional).
       await _pullChanges(uid, sinceMs);
 
-      // 3. Sync the notifications preference. Different conflict rules apply
-      //    here, so it lives outside the row-level sync.
+      // 2. Duw lokale wijzigingen naar Firestore. Conflicten zijn al opgelost
+      //    door de pull: tombstones die nieuwer zijn dan de lokale versie zijn
+      //    al toegepast, zodat we nu de juiste (tombstone of live) versie sturen.
+      await _pushChanges(uid, sinceMs);
+
+      // 3. Synchroniseer de notificatievoorkeur. Afwijkende conflictregels;
+      //    buiten de rijniveau-sync gehouden.
       await _syncNotificationsPreference(uid, strategy);
 
       _lastSyncAt = cycleStart;
@@ -167,6 +196,7 @@ class SyncService extends ChangeNotifier {
 
   // ── PUSH ──────────────────────────────────────────────────────────────────
 
+  /// Stuurt lokale wijzigingen (collectie, achievements, tellers) naar Firestore.
   Future<void> _pushChanges(String uid, int sinceMs) async {
     final firestore = FirebaseFirestore.instance;
     final userDoc = firestore.collection('users').doc(uid);
@@ -219,6 +249,7 @@ class SyncService extends ChangeNotifier {
 
   // ── PULL ──────────────────────────────────────────────────────────────────
 
+  /// Haalt wijzigingen op uit Firestore en past ze toe op de lokale database.
   Future<void> _pullChanges(String uid, int sinceMs) async {
     final firestore = FirebaseFirestore.instance;
     final userDoc = firestore.collection('users').doc(uid);
@@ -228,9 +259,14 @@ class SyncService extends ChangeNotifier {
         .where('updatedAt', isGreaterThan: sinceMs)
         .get();
     for (final doc in collectionSnap.docs) {
-      await DatabaseHelper.instance.applyRemoteCollectionRow(
-        Map<String, dynamic>.from(doc.data()),
-      );
+      final row = Map<String, dynamic>.from(doc.data());
+      await DatabaseHelper.instance.applyRemoteCollectionRow(row);
+      // Als er een cloud-cover URL is, download dan lokaal zodat de UI
+      // geen netwerkverzoek nodig heeft voor elke weergave.
+      final cloudUrl = row['cloudCoverUrl'] as String?;
+      if (cloudUrl != null && cloudUrl.isNotEmpty) {
+        await _downloadCoverIfAbsent(cloudUrl, uid, row['syncId'] as String?);
+      }
     }
 
     final achievementsSnap = await userDoc
@@ -254,7 +290,7 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  // ── Cloud cleanup ────────────────────────────────────────────────────────
+  // ── Cloud opschonen ──────────────────────────────────────────────────────────
 
   Future<void> _wipeCloud(String uid) async {
     final firestore = FirebaseFirestore.instance;
@@ -273,7 +309,7 @@ class SyncService extends ChangeNotifier {
         await batch.commit();
       }
     }
-    // Also clear user-level preferences (notifications, …).
+    // Verwijder ook voorkeuren op gebruikersniveau (meldingen, ...).
     await userDoc
         .collection('preferences')
         .doc('main')
@@ -281,14 +317,15 @@ class SyncService extends ChangeNotifier {
         .catchError((_) {});
   }
 
-  // ── Preferences sync (notifications) ─────────────────────────────────────
+  // ── Voorkeurssync (notificaties) ───────────────────────────────────────────────
   //
-  // Conflict rules (per spec):
-  //   merge           → enabled = local OR remote (any AAN wins)
-  //   overwriteCloud  → push local, ignore remote
-  //   overwriteLocal  → take remote, ignore local
-  //   null (regular)  → last-write-wins on `updatedAt`
+  // Conflictregels (per spec):
+  //   merge           → ingeschakeld = lokaal OF extern (AAN wint altijd)
+  //   overwriteCloud  → duw lokale waarde, negeer extern
+  //   overwriteLocal  → neem externe waarde, negeer lokaal
+  //   null (normaal)  → last-write-wins op `updatedAt`
 
+  /// Synchroniseert de meldingsvoorkeur tussen de lokale database en Firestore.
   Future<void> _syncNotificationsPreference(
     String uid,
     InitialSyncStrategy? strategy,
@@ -324,9 +361,9 @@ class SyncService extends ChangeNotifier {
     int newUpdatedAt = DateTime.now().millisecondsSinceEpoch;
 
     if (strategy != null) {
-      // Account koppelen (registreren of inloggen): altijd OR-merge.
-      // Notificatie-instelling is AAN zodra één kant AAN is.
-      // Dit geldt ongeacht de gekozen datastrategie (merge/overwrite).
+      // Account koppelen (registreren of inloggen): altijd OR-samenvoeging.
+      // Notificatie is AAN zodra één kant AAN is.
+      // Geldt ongeacht de gekozen datastrategie (merge/overwrite).
       final merged = localEnabled || (hasRemote && remoteEnabled);
       if (merged != localEnabled) newLocalValue = merged;
       newRemotePayload = {
@@ -335,9 +372,9 @@ class SyncService extends ChangeNotifier {
       };
     } else {
       // Normale sync: last-write-wins op `updatedAt`.
-      // OR-merge gebeurt uitsluitend bij account koppelen (strategy != null).
+      // OR-samenvoeging gebeurt uitsluitend bij account koppelen (strategy != null).
       if (!hasRemote) {
-        // Niets in de cloud → push lokale waarde.
+        // Niets in de cloud → stuur lokale waarde.
         newRemotePayload = {
           'notificationsEnabled': localEnabled,
           'notificationsEnabledUpdatedAt': localUpdatedAt == 0
@@ -345,13 +382,13 @@ class SyncService extends ChangeNotifier {
               : localUpdatedAt,
         };
       } else if (localUpdatedAt > remoteUpdatedAt) {
-        // Lokaal is recenter → push naar cloud.
+        // Lokaal is recenter → naar cloud pushen.
         newRemotePayload = {
           'notificationsEnabled': localEnabled,
           'notificationsEnabledUpdatedAt': localUpdatedAt,
         };
       } else if (remoteUpdatedAt > localUpdatedAt) {
-        // Cloud is recenter → neem remote over.
+        // Cloud is recenter → externe waarde overnemen.
         if (remoteEnabled != localEnabled) newLocalValue = remoteEnabled;
         newUpdatedAt = remoteUpdatedAt;
       }
@@ -360,8 +397,8 @@ class SyncService extends ChangeNotifier {
 
     if (newRemotePayload != null) {
       try {
-        // Force the use of merge: true so that the write succeeds even if
-        // the parent document doesn't strictly exist via a prior set().
+        // Gebruik merge: true zodat de schrijfactie slaagt ook als het
+        // bovenliggende document nog niet strikt bestaat via set().
         await docRef.set(newRemotePayload, SetOptions(merge: true));
         debugPrint(
           '[SyncService] notif sync: pushed $newRemotePayload to '
@@ -379,7 +416,7 @@ class SyncService extends ChangeNotifier {
         enabled: newLocalValue,
         updatedAt: newUpdatedAt,
       );
-      // Apply the change to the platform notification scheduler.
+      // Pas de wijziging toe op de platformnotificatieplanner.
       if (newLocalValue) {
         await NotificationService.instance.requestPermissions();
         await NotificationService.instance.scheduleAll();
@@ -389,10 +426,10 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  /// Returns true if the cloud already has data for this user. Used to decide
-  /// whether to prompt the merge dialog at sign-in time.
-  /// Tombstones (soft-deleted rows where `deletedAt` is set) are ignored —
-  /// they are not real user data, just deletion markers.
+  /// Geeft true als de cloud al data heeft voor deze gebruiker. Gebruikt om te bepalen
+  /// of het samenvoegdialoog getoond moet worden bij aanmelden.
+  /// Tombstones (zacht-verwijderde rijen met `deletedAt`) worden genegeerd —
+  /// dit zijn geen echte gebruikersdata, alleen verwijderingsmarkeringen.
   Future<bool> remoteHasData(String uid) async {
     if (Firebase.apps.isEmpty) return false;
     final firestore = FirebaseFirestore.instance;
@@ -411,9 +448,9 @@ class SyncService extends ChangeNotifier {
     return achSnap.docs.isNotEmpty;
   }
 
-  /// Whether the device has local syncable data right now.
-  /// Considers both the game collection and unlocked app-level achievements,
-  /// so the merge dialog also fires for users with no games but with progress.
+  /// Of het toestel op dit moment lokale syncbare data heeft.
+  /// Houdt rekening met zowel de gamecollectie als ontgrendelde achievements,
+  /// zodat het dialoog ook verschijnt voor gebruikers zonder games maar met voortgang.
   Future<bool> localHasData() async {
     final items = await DatabaseHelper.instance.getCollectionItems();
     if (items.isNotEmpty) return true;
@@ -421,12 +458,45 @@ class SyncService extends ChangeNotifier {
     return achievements.isNotEmpty;
   }
 
+  /// Downloadt een cover-afbeelding van [cloudUrl] naar lokale opslag als die
+  /// nog niet aanwezig is, en werkt de DB-rij bij met het lokale pad.
+  Future<void> _downloadCoverIfAbsent(
+    String cloudUrl,
+    String uid,
+    String? syncId,
+  ) async {
+    try {
+      if (syncId == null) return;
+      final dir = await getApplicationDocumentsDirectory();
+      final localPath = '${dir.path}/covers/$syncId.jpg';
+      final file = File(localPath);
+      if (await file.exists()) return; // al aanwezig
+      await file.parent.create(recursive: true);
+      final response = await http.get(Uri.parse(cloudUrl));
+      if (response.statusCode == 200) {
+        await file.writeAsBytes(response.bodyBytes);
+        // Werk het lokale pad bij in de DB via een directe update.
+        final db = await DatabaseHelper.instance.database;
+        await db.rawUpdate(
+          'UPDATE collection SET customCoverPath = ? WHERE syncId = ?',
+          [localPath, syncId],
+        );
+      }
+    } catch (_) {
+      // Niet fataal: app werkt gewoon met de cloud URL als fallback.
+    }
+  }
+
+  /// Verwijdert het lokale auto-increment ID en het lokale bestandspad zodat
+  /// Firestore alleen overdraagbare data ontvangt.
   Map<String, dynamic> _stripLocalIds(Map<String, dynamic> row) {
     final out = Map<String, dynamic>.from(row);
-    out.remove('id'); // local autoincrement, not synced
+    out.remove('id'); // lokale auto-increment, wordt niet gesynchroniseerd
+    out.remove('customCoverPath'); // lokaal bestandspad, niet over te dragen
     return out;
   }
 
+  /// Splits een lijst in sublijsten van maximaal [size] elementen.
   Iterable<List<T>> _chunked<T>(List<T> list, int size) sync* {
     for (var i = 0; i < list.length; i += size) {
       yield list.sublist(i, (i + size).clamp(0, list.length));

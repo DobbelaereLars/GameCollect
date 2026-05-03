@@ -1,29 +1,56 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'core/sync/auth_service.dart';
+import 'core/sync/connectivity_service.dart';
+import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_theme_controller.dart';
-import 'features/navigation/presentation/game_collect_shell.dart';
+import 'features/collection/data/collection_notifier.dart';
+import 'features/splash/presentation/splash_page.dart';
 
+/// Root-widget van de GameCollect-app.
+/// Levert alle gedeelde providers via [MultiProvider] en luistert op
+/// [AppThemeController] voor dynamische thema-updates.
 class GameCollectApp extends StatelessWidget {
   const GameCollectApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppThemeController.instance,
-      builder: (context, _) {
-        final brightness = AppThemeController.instance.effectiveBrightness;
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: AppThemeController.instance.mode,
-          // Force a full subtree rebuild on brightness change so widgets that
-          // read `AppTheme.<dynamic>` getters directly (i.e. don't depend on
-          // an InheritedWidget) also pick up the new colors immediately.
-          home: GameCollectShell(key: ValueKey(brightness)),
-        );
-      },
+    return MultiProvider(
+      providers: [
+        // App-breed thema — al geïnitialiseerd in main.dart via singleton.
+        ChangeNotifierProvider<AppThemeController>.value(
+          value: AppThemeController.instance,
+        ),
+        // Authenticatiestatus (Firebase Auth via singleton).
+        ChangeNotifierProvider<AuthService>.value(value: AuthService.instance),
+        // Netwerkreachability (connectivity_plus via singleton).
+        ChangeNotifierProvider<ConnectivityService>.value(
+          value: ConnectivityService.instance,
+        ),
+        // Cloud-synchronisatiestatus (Firestore via singleton).
+        ChangeNotifierProvider<SyncService>.value(value: SyncService.instance),
+        // Collectielijst — de enige source-of-truth voor CollectionItems.
+        ChangeNotifierProvider<CollectionNotifier>(
+          create: (_) => CollectionNotifier(),
+        ),
+      ],
+      child: Consumer<AppThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            // Forceer een volledige herbouw (incl. Navigator-stack) zodra de
+            // effectieve helderheid wisselt. Widgets die AppTheme-static-getters
+            // gebruiken, worden zo gegarandeerd opnieuw gebuild.
+            key: ValueKey(themeController.effectiveBrightness),
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeController.mode,
+            home: const SplashPage(),
+          );
+        },
+      ),
     );
   }
 }

@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:provider/provider.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../collection/data/collection_notifier.dart';
 import '../../collection/domain/collection_item.dart';
 import '../../collection/presentation/collection_page.dart';
 import '../../discover/data/rawg_games_api.dart';
@@ -15,12 +17,14 @@ import '../../discover/domain/rawg_game.dart';
 import '../../discover/presentation/discover_page.dart';
 import 'profile_page.dart';
 
+/// Overzichtspagina: toont collectionstatistieken en trending games via RAWG.
 class OverviewPage extends StatefulWidget {
   const OverviewPage({super.key});
 
-  /// Set a tab index to request that the shell switches to that tab.
-  /// 0 = Overzicht, 1 = Collectie, 2 = Ontdekken, 3 = Voortgang, 4 = Achievements
+  /// Verzoek om naar een andere tab te schakelen (0–4). Ingesteld door andere pagina's.
   static final switchToTabRequest = ValueNotifier<int?>(null);
+
+  /// Verzoek om naar boven te scrollen, geactiveerd door de tab-navigatie.
   static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
@@ -29,11 +33,7 @@ class OverviewPage extends StatefulWidget {
 
 class _OverviewPageState extends State<OverviewPage> {
   final ScrollController _scrollController = ScrollController();
-  // ── Collection (offline) ──────────────────────────────────────────────────
-  List<CollectionItem> _collectionItems = [];
-  bool _isLoadingCollection = true;
-
-  // ── Trending games (online / RAWG) ────────────────────────────────────────
+  // ── Trending games (online / RAWG) — lokale UI-state ─────────────────────
   final http.Client _httpClient = http.Client();
   final RawgGamesApi _rawgApi = const RawgGamesApi();
   List<RawgGame> _trendingRaw = [];
@@ -42,19 +42,21 @@ class _OverviewPageState extends State<OverviewPage> {
   String? _trendingError;
   Timer? _slowConnectionTimer;
 
-  String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
+  /// RAWG API-sleutel uit het .env-bestand.
+  String get _rawgApiKey => SecureStorageService.rawgApiKey;
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // ── Levenscyclus ──────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _loadCollection();
+    // App-state (collectielijst) wordt beheerd door CollectionNotifier via
+    // de provider — geen handmatige DatabaseHelper-listener nodig.
     _fetchTrending();
-    DatabaseHelper.instance.addListener(_loadCollection);
     OverviewPage.scrollToTopRequest.addListener(_onScrollToTop);
   }
 
+  /// Scrollt de pagina naar boven na een tab-tik op het overzicht-icoon.
   void _onScrollToTop() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -69,24 +71,14 @@ class _OverviewPageState extends State<OverviewPage> {
   void dispose() {
     _slowConnectionTimer?.cancel();
     _httpClient.close();
-    DatabaseHelper.instance.removeListener(_loadCollection);
     OverviewPage.scrollToTopRequest.removeListener(_onScrollToTop);
     _scrollController.dispose();
     super.dispose();
   }
 
-  // ── Data fetching ─────────────────────────────────────────────────────────
+  // ── Gegevens ophalen ─────────────────────────────────────────────────────
 
-  Future<void> _loadCollection() async {
-    if (!mounted) return;
-    final items = await DatabaseHelper.instance.getCollectionItems();
-    if (!mounted) return;
-    setState(() {
-      _collectionItems = items;
-      _isLoadingCollection = false;
-    });
-  }
-
+  /// Haalt trending games op via de RAWG API met trage-verbinding-indicator.
   Future<void> _fetchTrending() async {
     if (_rawgApiKey.isEmpty) {
       setState(() {
@@ -143,38 +135,39 @@ class _OverviewPageState extends State<OverviewPage> {
     }
   }
 
-  // ── Computed properties ───────────────────────────────────────────────────
+  // ── Computed properties (ontvangen collectionItems van provider) ──────────
 
-  List<RawgGame> get _trendingGames {
-    final ownedIds = _collectionItems.map((e) => e.apiId).toSet();
+  List<RawgGame> _trendingGames(List<CollectionItem> collectionItems) {
+    final ownedIds = collectionItems.map((e) => e.apiId).toSet();
     return _trendingRaw
         .where((g) => !ownedIds.contains(g.id))
         .take(10)
         .toList(growable: false);
   }
 
-  int get _totalUniqueGames =>
-      _collectionItems.map((e) => e.apiId).toSet().length;
+  /// Totaal aantal unieke spellen in de collectie (per apiId).
+  int _totalUniqueGames(List<CollectionItem> collectionItems) =>
+      collectionItems.map((e) => e.apiId).toSet().length;
 
-  int get _totalPlaytimeMinutes =>
-      _collectionItems.fold(0, (sum, item) => sum + item.totalPlaytimeMinutes);
+  /// Totale speeltijd in minuten over alle collectie-items.
+  int _totalPlaytimeMinutes(List<CollectionItem> collectionItems) =>
+      collectionItems.fold(0, (sum, item) => sum + item.totalPlaytimeMinutes);
 
-  int get _completedCount => _collectionItems
+  /// Aantal unieke voltooide spellen (manueel of via voortgangsratio).
+  int _completedCount(List<CollectionItem> collectionItems) => collectionItems
       .where((item) => item.isManuallyCompleted || item.progressRatio >= 1.0)
       .map((e) => e.apiId)
       .toSet()
       .length;
 
-  /// Unique games from collection (first occurrence per apiId), max 10.
-  /// Each entry carries allItems (all platform entries for same apiId) so
-  /// the card can show platform badges.
-  List<_GameGroup> get _recentGroups {
+  /// Unieke games uit de collectie (eerste voorkomen per apiId), max 10.
+  List<_GameGroup> _recentGroups(List<CollectionItem> collectionItems) {
     final seen = <int>{};
     final result = <_GameGroup>[];
-    for (final item in _collectionItems) {
+    for (final item in collectionItems) {
       if (!seen.contains(item.apiId)) {
         seen.add(item.apiId);
-        final allForGame = _collectionItems
+        final allForGame = collectionItems
             .where((e) => e.apiId == item.apiId)
             .toList(growable: false);
         result.add(_GameGroup(representative: item, allItems: allForGame));
@@ -183,15 +176,15 @@ class _OverviewPageState extends State<OverviewPage> {
     return result.take(10).toList();
   }
 
-  /// Games with ANY platform that has playtime > 0, not yet completed,
-  /// AND a playtime entry added within the last 5 days. Sorted by total playtime desc.
-  List<_GameGroup> get _inProgressGroups {
+  /// Games waarbij minstens één platform speelduur heeft, nog niet voltooid is
+  /// en een speelduurinvoer heeft van de afgelopen 5 dagen.
+  List<_GameGroup> _inProgressGroups(List<CollectionItem> collectionItems) {
     final seen = <int>{};
     final candidates = <_GameGroup>[];
     final cutoff = DateTime.now().subtract(const Duration(days: 5));
-    for (final item in _collectionItems) {
+    for (final item in collectionItems) {
       if (!seen.contains(item.apiId)) {
-        final allForGame = _collectionItems
+        final allForGame = collectionItems
             .where((e) => e.apiId == item.apiId)
             .toList(growable: false);
         final totalMinutes = allForGame.fold<int>(
@@ -227,9 +220,9 @@ class _OverviewPageState extends State<OverviewPage> {
   }
 
   /// Total minutes from playtime entries added in the last 7 days.
-  int get _last7DaysMinutes {
+  int _last7DaysMinutes(List<CollectionItem> collectionItems) {
     final cutoff = DateTime.now().subtract(const Duration(days: 7));
-    return _collectionItems.fold<int>(
+    return collectionItems.fold<int>(
       0,
       (sum, item) =>
           sum +
@@ -239,8 +232,9 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Hulpfuncties ──────────────────────────────────────────────────────────
 
+  /// Formatteert minuten naar leesbare tijdnotatie (bijv. "2u 15m").
   String _formatMinutes(int minutes) {
     if (minutes == 0) return '0 min';
     final h = minutes ~/ 60;
@@ -250,6 +244,7 @@ class _OverviewPageState extends State<OverviewPage> {
     return '${h}u ${m}m';
   }
 
+  /// Geeft een tijdsgebonden begroetingstekst terug op basis van het huidige uur.
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 6) return 'Goedenacht';
@@ -258,11 +253,13 @@ class _OverviewPageState extends State<OverviewPage> {
     return 'Goedenavond';
   }
 
+  /// Navigeert naar de detailpagina van een collectie-item via de collectiepagina.
   void _navigateToDetail(CollectionItem item) {
     if (item.id == null) return;
     CollectionPage.itemDetailRequest.value = item.id;
   }
 
+  /// Navigeert naar de RAWG-gamepagina via de ontdekkingspagina.
   void _navigateToGame(RawgGame game) {
     DiscoverPage.gameDetailRequest.value = (
       gameId: game.id,
@@ -276,6 +273,12 @@ class _OverviewPageState extends State<OverviewPage> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+
+    // App-state: luistert op CollectionNotifier en triggert een rebuild
+    // wanneer de collectielijst wijzigt. UI-state (trending) blijft lokaal.
+    final collection = context.watch<CollectionNotifier>();
+    final collectionItems = collection.items;
+    final isLoadingCollection = collection.isLoading;
 
     return Scaffold(
       backgroundColor: AppTheme.white,
@@ -329,7 +332,7 @@ class _OverviewPageState extends State<OverviewPage> {
                         color: AppTheme.gray500,
                       ),
                     ),
-                    if (!_isLoadingCollection) ...[
+                    if (!isLoadingCollection) ...[
                       const SizedBox(height: 16),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -338,18 +341,21 @@ class _OverviewPageState extends State<OverviewPage> {
                             _StatChip(
                               icon: LucideIcons.library,
                               label:
-                                  '$_totalUniqueGames ${_totalUniqueGames == 1 ? 'game' : 'games'}',
+                                  '${_totalUniqueGames(collectionItems)} ${_totalUniqueGames(collectionItems) == 1 ? 'game' : 'games'}',
                             ),
                             const SizedBox(width: 8),
                             _StatChip(
                               icon: LucideIcons.clock,
-                              label: _formatMinutes(_totalPlaytimeMinutes),
+                              label: _formatMinutes(
+                                _totalPlaytimeMinutes(collectionItems),
+                              ),
                             ),
-                            if (_completedCount > 0) ...[
+                            if (_completedCount(collectionItems) > 0) ...[
                               const SizedBox(width: 8),
                               _StatChip(
                                 icon: LucideIcons.trophy,
-                                label: '$_completedCount voltooid',
+                                label:
+                                    '${_completedCount(collectionItems)} voltooid',
                               ),
                             ],
                           ],
@@ -369,18 +375,18 @@ class _OverviewPageState extends State<OverviewPage> {
                   _SectionHeader(
                     title: 'Mijn collectie',
                     actionLabel:
-                        (!_isLoadingCollection && _collectionItems.isNotEmpty)
+                        (!isLoadingCollection && collectionItems.isNotEmpty)
                         ? 'Bekijk alles'
                         : null,
                     onAction: () => OverviewPage.switchToTabRequest.value = 1,
                   ),
-                  if (_isLoadingCollection)
+                  if (isLoadingCollection)
                     const _HorizontalLoadingPlaceholder()
-                  else if (_collectionItems.isEmpty)
-                    _EmptyCollectionCard()
+                  else if (collectionItems.isEmpty)
+                    const _EmptyCollectionCard()
                   else
                     _HorizontalGroupList(
-                      groups: _recentGroups,
+                      groups: _recentGroups(collectionItems),
                       showProgress: false,
                       formatMinutes: _formatMinutes,
                       onTap: _navigateToDetail,
@@ -390,14 +396,15 @@ class _OverviewPageState extends State<OverviewPage> {
             ),
 
             // ── Bezig met spelen (conditioneel) ───────────────────────────
-            if (!_isLoadingCollection && _inProgressGroups.isNotEmpty)
+            if (!isLoadingCollection &&
+                _inProgressGroups(collectionItems).isNotEmpty)
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const _SectionHeader(title: 'Bezig met spelen'),
                     _HorizontalGroupList(
-                      groups: _inProgressGroups,
+                      groups: _inProgressGroups(collectionItems),
                       showProgress: true,
                       formatMinutes: _formatMinutes,
                       onTap: _navigateToDetail,
@@ -407,12 +414,12 @@ class _OverviewPageState extends State<OverviewPage> {
               ),
 
             // ── Speelduur samenvatting ────────────────────────────────────
-            if (!_isLoadingCollection && _last7DaysMinutes > 0)
+            if (!isLoadingCollection && _last7DaysMinutes(collectionItems) > 0)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                   child: _PlaytimeSummaryCard(
-                    weekMinutes: _last7DaysMinutes,
+                    weekMinutes: _last7DaysMinutes(collectionItems),
                     formatMinutes: _formatMinutes,
                   ),
                 ),
@@ -444,7 +451,7 @@ class _OverviewPageState extends State<OverviewPage> {
                       )
                     else
                       _HorizontalTrendingList(
-                        games: _trendingGames,
+                        games: _trendingGames(collectionItems),
                         onTap: _navigateToGame,
                       ),
                   ],
@@ -577,6 +584,8 @@ class _HorizontalLoadingPlaceholder extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _EmptyCollectionCard extends StatelessWidget {
+  const _EmptyCollectionCard();
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -688,15 +697,15 @@ class _SectionErrorCard extends StatelessWidget {
 class _GameGroup {
   const _GameGroup({required this.representative, required this.allItems});
 
-  /// The first/primary CollectionItem (used for cover, title, apiId).
+  /// Het eerste/primaire CollectionItem (gebruikt voor cover, titel en apiId).
   final CollectionItem representative;
 
-  /// All platform entries for this game (may be 1 or more).
+  /// Alle platform-entries voor dit spel (één of meer).
   final List<CollectionItem> allItems;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Horizontal game list (collection groups)
+// Horizontale gamelijst (collectiegroepen)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HorizontalGroupList extends StatelessWidget {
@@ -715,7 +724,7 @@ class _HorizontalGroupList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Extra 16 px reserved for dot indicators (always, so covers are uniform).
-    final double height = showProgress ? 226 : 210;
+    const double height = 210;
     return SizedBox(
       height: height,
       child: ListView.builder(
@@ -798,13 +807,13 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
 
   List<CollectionItem> get _eligibleItems {
     if (widget.showProgress) {
-      // For "bezig met spelen": only platforms with playtime
+      // Voor "bezig met spelen": alleen platforms met speelduur.
       final withPlaytime = widget.group.allItems
           .where((e) => e.totalPlaytimeMinutes > 0)
           .toList(growable: false);
       return withPlaytime.isNotEmpty ? withPlaytime : widget.group.allItems;
     }
-    // For "mijn collectie": all platforms
+    // Voor "mijn collectie": alle platforms.
     return widget.group.allItems;
   }
 
@@ -818,11 +827,24 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     return raw.replaceAll(RegExp(r'\s*\([^)]*\)$'), '').trim();
   }
 
+  /// Geeft de last-modified timestamp van een bestand terug als int.
+  /// Wordt gebruikt als ValueKey zodat Image.file altijd herlaadt als het
+  /// bestand op schijf veranderd is (zelfs bij hetzelfde pad).
+  int _fileMod(String path) {
+    try {
+      return File(path).lastModifiedSync().millisecondsSinceEpoch;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Widget _coverWidget(CollectionItem item) {
-    if (item.customCoverPath != null) {
+    final localPath = item.customCoverPath;
+    if (localPath != null && File(localPath).existsSync()) {
       return SizedBox.expand(
         child: Image.file(
-          File(item.customCoverPath!),
+          File(localPath),
+          key: ValueKey('cover_${item.id}_${_fileMod(localPath)}'),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (ctx, err, stack) => Center(
@@ -835,12 +857,31 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
         ),
       );
     }
+    if (item.cloudCoverUrl != null) {
+      return SizedBox.expand(
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.cloudCoverUrl!,
+          fit: BoxFit.cover,
+          errorWidget: (ctx, url, err) => Center(
+            child: Icon(
+              LucideIcons.gamepad2,
+              size: 32,
+              color: AppTheme.gray300,
+            ),
+          ),
+        ),
+      );
+    }
     if (item.coverUrl != null) {
       return SizedBox.expand(
-        child: Image.network(
-          item.coverUrl!,
+        child: CachedNetworkImage(
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          imageUrl: item.coverUrl!,
           fit: BoxFit.cover,
-          errorBuilder: (ctx, err, stack) => Center(
+          errorWidget: (ctx, url, err) => Center(
             child: Icon(
               LucideIcons.gamepad2,
               size: 32,
@@ -864,6 +905,8 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
     final platformName = current.selectedPlatforms.isNotEmpty
         ? _cleanPlatformName(current.selectedPlatforms.first)
         : null;
+    final bool isCompleted =
+        current.isManuallyCompleted || current.progressRatio >= 1.0;
 
     return GestureDetector(
       onTap: () => widget.onTap(current),
@@ -884,11 +927,11 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 320),
                         transitionBuilder: (child, animation) {
-                          // AnimatedSwitcher reverses the animation for the
-                          // outgoing child (1→0), so both begin/end use
-                          // Offset.zero as the "resting" position:
-                          // • incoming: begin=(±1,0) → end=(0,0)  [0→1]
-                          // • outgoing: end=(0,0) stays; begin=(∓1,0)  [1→0 → drifts off]
+                          // AnimatedSwitcher keert de animatie om voor het
+                          // uitgaande kind (1→0), dus beide begin/end gebruiken
+                          // Offset.zero als de "rustpositie":
+                          // • inkomend: begin=(±1,0) → end=(0,0)  [0→1]
+                          // • uitgaand: end=(0,0) blijft; begin=(∓1,0)  [1→0 → schuift weg]
                           final dir = _forward ? 1.0 : -1.0;
                           final isIncoming =
                               child.key == ValueKey(_selectedIndex);
@@ -914,7 +957,7 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                       ),
                     ),
 
-                    // Top-left badges: platform (multi only) + playtime (in-progress only)
+                    // Top-left badges: platform + playtime + trophy bij voltooiing
                     Positioned(
                       top: 8,
                       left: 8,
@@ -931,13 +974,28 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                             const SizedBox(height: 5),
                           ],
                           if (widget.showProgress &&
-                              current.totalPlaytimeMinutes > 0)
+                              current.totalPlaytimeMinutes > 0) ...[
                             _CoverBadge(
                               icon: LucideIcons.clock,
                               label: widget.formatMinutes(
                                 current.totalPlaytimeMinutes,
                               ),
                               filled: true,
+                            ),
+                            const SizedBox(height: 5),
+                          ],
+                          if (isCompleted)
+                            Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: AppTheme.orange500,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                LucideIcons.trophy,
+                                size: 11,
+                                color: AppTheme.trueWhite,
+                              ),
                             ),
                         ],
                       ),
@@ -983,8 +1041,8 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
               ),
             ),
 
-            // Dot indicators – 16 px slot always reserved to keep all card
-            // heights uniform; filled only when there are multiple platforms.
+            // Stippelweergave — altijd een 16 px ruimte gereserveerd zodat
+            // kaarthoogtes uniform blijven; alleen gevuld bij meerdere platforms.
             SizedBox(
               height: 16,
               child: hasMultiple
@@ -1028,12 +1086,6 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
                     )
                   : const SizedBox.shrink(),
             ),
-
-            // Progress bar
-            if (widget.showProgress) ...[
-              const SizedBox(height: 6),
-              _MiniProgressBar(ratio: current.progressRatio),
-            ],
           ],
         ),
       ),
@@ -1085,38 +1137,6 @@ class _CoverBadge extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-class _MiniProgressBar extends StatelessWidget {
-  const _MiniProgressBar({required this.ratio});
-
-  final double ratio;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppTheme.orange100,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: ratio.clamp(0.0, 1.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.orange500,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -1252,10 +1272,12 @@ class _TrendingGameCard extends StatelessWidget {
             Container(
               color: AppTheme.orange50,
               child: game.coverUrl != null
-                  ? Image.network(
-                      game.coverUrl!,
+                  ? CachedNetworkImage(
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      imageUrl: game.coverUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (ctx, error, stack) => Center(
+                      errorWidget: (ctx, url, error) => Center(
                         child: Icon(
                           LucideIcons.gamepad2,
                           size: 32,
