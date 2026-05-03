@@ -31,7 +31,7 @@ Zorg dat je Flutter-versie overeenkomt met de versie in `.fvmrc`.
 
 ### 1. RAWG API-sleutel
 
-Maak een gratis account aan op [https://rawg.io/apiv2](https://rawg.io/apiv2) en kopieer je API-sleutel.
+Maak een gratis account aan op [https://rawg.io/apidocs](https://rawg.io/apidocs) en kopieer je API-sleutel.
 
 ```bash
 cp .env.example .env
@@ -63,7 +63,13 @@ npm install -g firebase-tools
 dart pub global activate flutterfire_cli
 ```
 
-Meld je aan en koppel het project:
+Als het `ios/Runner.xcodeproj` ontbreekt (bijv. na een verse clone), genereer het eerst opnieuw:
+
+```bash
+flutter create --platforms=ios .
+```
+
+Meld je daarna aan en koppel het project:
 
 ```bash
 firebase login

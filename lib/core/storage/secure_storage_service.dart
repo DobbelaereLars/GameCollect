@@ -32,17 +32,16 @@ class SecureStorageService {
   static Future<void> initialize() async {
     try {
       String? stored = await _storage.read(key: _rawgKeyName);
+      final fromEnv = dotenv.env['RAWG_API_KEY'] ?? '';
 
-      if (stored == null || stored.isEmpty) {
-        // Eerste start: migreer vanuit .env naar de veilige opslag.
-        final fromEnv = dotenv.env['RAWG_API_KEY'] ?? '';
-        if (fromEnv.isNotEmpty) {
-          await _storage.write(key: _rawgKeyName, value: fromEnv);
-          stored = fromEnv;
-          debugPrint(
-            '[SecureStorage] RAWG-sleutel gemigreerd naar veilige opslag.',
-          );
-        }
+      // Overschrijf de Keychain als .env een waarde heeft die afwijkt
+      // (bijv. na een build met een gewijzigde API-sleutel).
+      if (fromEnv.isNotEmpty && fromEnv != stored) {
+        await _storage.write(key: _rawgKeyName, value: fromEnv);
+        stored = fromEnv;
+        debugPrint('[SecureStorage] RAWG-sleutel bijgewerkt vanuit .env.');
+      } else if (stored == null || stored.isEmpty) {
+        debugPrint('[SecureStorage] Geen RAWG-sleutel beschikbaar.');
       }
 
       _rawgApiKey = stored ?? '';
