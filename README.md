@@ -40,7 +40,7 @@ cp .env.example .env
 Open `.env` en vervang de placeholder:
 
 ```
-RAWG_API_KEY=949d0b59db844930b897d6086c736904
+RAWG_API_KEY=jouw_sleutel_hier
 ```
 
 ### 2. Firebase
