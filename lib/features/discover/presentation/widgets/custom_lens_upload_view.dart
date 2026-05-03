@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+/// Resultaat van een Google Lens-scan: titel en beschrijving van het herkende spel.
 class CodeLensResult {
   final String title;
   final String description;
@@ -11,10 +12,19 @@ class CodeLensResult {
   const CodeLensResult({required this.title, required this.description});
 }
 
+/// Widget die een afbeelding uploadt naar Google Lens via een verborgen WebView
+/// en het herkende spelresultaat teruggeeft via callbacks.
 class CustomLensUploadView extends StatefulWidget {
+  /// Het lokale afbeeldingsbestand dat geüpload wordt.
   final File imageFile;
+
+  /// Callback aangeroepen met het spelresultaat zodra Lens iets herkent.
   final ValueChanged<CodeLensResult>? onResult;
+
+  /// Callback voor statusmeldingen tijdens het analyseerproces.
   final ValueChanged<String>? onStatus;
+
+  /// Callback aangeroepen als er een fout optreedt.
   final ValueChanged<String>? onError;
 
   const CustomLensUploadView({
@@ -31,8 +41,11 @@ class CustomLensUploadView extends StatefulWidget {
 
 class _CustomLensUploadViewState extends State<CustomLensUploadView> {
   late final WebViewController _controller;
+
+  // Voorkomt dat dezelfde afbeelding meerdere keren geüpload wordt.
   bool _didUpload = false;
 
+  /// Stelt de WebViewController in, configureert cookies en laadt de upload-HTML.
   @override
   void initState() {
     super.initState();
@@ -99,7 +112,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
             }
           },
           onWebResourceError: (error) {
-            // Treat specific errors as network issues
+            // Specifieke netwerkfouten worden omgezet naar NETWORK_ERROR.
             if (error.errorType == WebResourceErrorType.hostLookup ||
                 error.errorType == WebResourceErrorType.timeout ||
                 error.errorType == WebResourceErrorType.unknown) {
@@ -115,6 +128,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     _loadLocalHtml();
   }
 
+  /// Laadt de statische HTML-pagina met het uploadformulier in de WebView.
   Future<void> _loadLocalHtml() async {
     const html = '''
 <!DOCTYPE html>
@@ -173,6 +187,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     await _controller.loadHtmlString(html, baseUrl: 'https://lens.google.com/');
   }
 
+  /// Leest de afbeelding als base64 en injecteert deze in het uploadformulier.
   Future<void> _injectAndUpload() async {
     if (_didUpload) return;
     _didUpload = true;
@@ -185,6 +200,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     await _controller.runJavaScript("injectAndSubmit('$b64');");
   }
 
+  /// Injecteert JavaScript om de Google Lens-resultaatpagina te scrapen.
   Future<void> _injectScraper() async {
     widget.onStatus?.call('Analyseren (AI overzicht)...');
 
@@ -213,7 +229,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
   // We triggeren een soepele scroll naar beneden.
   window.scrollBy({ top: 400, left: 0, behavior: 'smooth' });
 
-  // Google constantly changes DOM. We use generic scraping tactics.
+  // Google wijzigt de DOM continu. Wij gebruiken generieke scraping-technieken.
   function scrapeAndPost(){
     let title = '';
     let desc = '';
@@ -313,7 +329,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
        return;
     }
 
-    // If completely empty or no bold text found (AI overview niet getriggerd)
+    // Als de tekst volledig leeg is of er geen vetgedrukte tekst gevonden is (AI-overzicht niet geactiveerd).
     if (!foundBoldText || !title) {
        postResult("ERROR_NO_RESULTS", "");
        return;
@@ -322,8 +338,8 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     postResult(title, desc);
   }
 
-  // We wait exactly 3.5 seconds for the page (en de AI overview animatie) to render fully then scrape it, 
-  // to avoid missing dynamic elements in AI overviews.
+  // We wachten precies 3,5 seconden zodat de pagina (en de AI-overviewanimatie)
+  // volledig geladen is vóór het scrapen, om dynamische elementen niet te missen.
   setTimeout(scrapeAndPost, 3500);
 })();
     ''';
@@ -331,6 +347,7 @@ class _CustomLensUploadViewState extends State<CustomLensUploadView> {
     await _controller.runJavaScript(js);
   }
 
+  /// Toont de WebView als onzichtbare container (wordt nooit direct gerenderd).
   @override
   Widget build(BuildContext context) {
     return WebViewWidget(controller: _controller);

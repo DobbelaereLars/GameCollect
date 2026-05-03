@@ -7,6 +7,8 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 
+/// Speeltijdpagina: toont per dag hoeveel minuten gespeeld is (weekweergave)
+/// en biedt knoppen om minuten toe te voegen of te verwijderen.
 class PlaytimePage extends StatefulWidget {
   const PlaytimePage({
     super.key,
@@ -26,7 +28,7 @@ class PlaytimePage extends StatefulWidget {
 class _PlaytimePageState extends State<PlaytimePage> {
   late List<PlaytimeEntry> _entries;
 
-  // 0 = current week, -1 = previous week, etc.
+  // 0 = huidige week, -1 = vorige week, enzovoort.
   int _weekOffset = 0;
 
   final _scrollController = ScrollController();
@@ -51,6 +53,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
     return '${date.year}-$m-$d';
   }
 
+  /// Geeft de maandag van de huidige week terug (tijdstempel op middernacht).
   DateTime _mondayOfCurrentWeek() {
     final now = DateTime.now();
     return DateTime(
@@ -60,6 +63,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
     ).subtract(Duration(days: now.weekday - 1));
   }
 
+  /// Berekent het weekverschil (in weken) van een datumsleutel t.o.v. de huidige week.
   int _weekOffsetForDate(String dateKey) {
     final parts = dateKey.split('-');
     if (parts.length != 3) return 0;
@@ -73,17 +77,21 @@ class _PlaytimePageState extends State<PlaytimePage> {
     return monday.difference(currentMonday).inDays ~/ 7;
   }
 
+  /// Geeft de maandag terug van de getoonde week.
   DateTime _mondayOfDisplayedWeek() {
     return _mondayOfCurrentWeek().add(Duration(days: _weekOffset * 7));
   }
 
+  /// Geeft alle 7 dagen van de getoonde week terug.
   List<DateTime> _weekDays() {
     final monday = _mondayOfDisplayedWeek();
     return List.generate(7, (i) => monday.add(Duration(days: i)));
   }
 
+  /// True als de getoonde week de huidige week is.
   bool get _isCurrentWeek => _weekOffset == 0;
 
+  /// Totaal gespeelde minuten op een specifieke dag.
   int _minutesForDay(DateTime day) {
     final key = _toDateKey(day);
     return _entries
@@ -91,8 +99,10 @@ class _PlaytimePageState extends State<PlaytimePage> {
         .fold(0, (s, e) => s + e.minutes);
   }
 
+  /// Totaal gespeelde minuten over alle tijden.
   int get _totalAll => _entries.fold(0, (s, e) => s + e.minutes);
 
+  /// Totaal gespeelde minuten in de getoonde week.
   int _weekTotal() {
     return _weekDays().fold(0, (s, d) => s + _minutesForDay(d));
   }
@@ -108,6 +118,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
     return '${h}u${min}m';
   }
 
+  /// Geeft minuten terug als lange string, bijv. '1u 30m'.
   String _formatMinutesLong(int m) {
     if (m == 0) return '0 min';
     final h = m ~/ 60;
@@ -117,6 +128,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
     return '${h}u ${min}m';
   }
 
+  /// Bouwt een leesbaar weekbereiklabel, bijv. '3 – 9 mrt'.
   String _weekRangeLabel() {
     final days = _weekDays();
     final start = days.first;
@@ -210,10 +222,10 @@ class _PlaytimePageState extends State<PlaytimePage> {
     });
 
     final h = hours > 0 ? '${hours}u ' : '';
-    final m = minutes > 0 ? '${minutes} min' : '';
+    final m = minutes > 0 ? '$minutes min' : '';
     messenger
       ..removeCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('${h}${m} speelduur toegevoegd.')));
+      ..showSnackBar(SnackBar(content: Text('$h$m speelduur toegevoegd.')));
   }
 
   // ─── Bottom sheet ─────────────────────────────────────────────────────────────
@@ -451,7 +463,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                         final fraction = maxMinutes == 0
                             ? 0.0
                             : mins / maxMinutes;
-                        // Min bar height 4 so empty days still show a stub
+                        // Minimale staafhoogte 4 zodat lege dagen toch zichtbaar zijn.
                         final barHeight = mins == 0
                             ? 4.0
                             : 12 + (fraction * 100);
@@ -577,7 +589,7 @@ class _PlaytimePageState extends State<PlaytimePage> {
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: () {
-                    // Group by date, sum minutes per day
+                    // Groepeer per datum en sommeer minuten per dag.
                     final Map<String, int> byDate = {};
                     for (final e in _entries) {
                       byDate[e.date] = (byDate[e.date] ?? 0) + e.minutes;
@@ -748,7 +760,7 @@ class _AddPlaytimeSheetState extends State<_AddPlaytimeSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header row
+          // Koptekstrij met titel en sluitknop.
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

@@ -238,7 +238,7 @@ class AppAchievement {
       type: AchievementType.platformCount,
       targetCount: 8,
     ),
-    // Notes
+    // Notities
     AppAchievement(
       id: 'notes_written',
       icon: LucideIcons.fileText,

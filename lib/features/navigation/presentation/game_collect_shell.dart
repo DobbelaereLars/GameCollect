@@ -14,6 +14,7 @@ import '../../overview/presentation/overview_page.dart';
 import '../domain/navigation_tab.dart';
 import 'widgets/app_bottom_navigation.dart';
 
+/// Interne helper die een tabinhoud inpakt in een eigen Navigator voor deep navigation.
 class _TabNavigator extends StatelessWidget {
   const _TabNavigator({required this.child, this.navigatorKey});
 
@@ -31,6 +32,7 @@ class _TabNavigator extends StatelessWidget {
   }
 }
 
+/// Interne helper die een widget levend houdt via [AutomaticKeepAliveClientMixin].
 class _KeepAlivePage extends StatefulWidget {
   const _KeepAlivePage({required this.child});
   final Widget child;
@@ -51,6 +53,7 @@ class _KeepAlivePageState extends State<_KeepAlivePage>
   }
 }
 
+/// Hoofdschil van de app: beheert de tabnavigatie, PageController en globale notifiers.
 class GameCollectShell extends StatefulWidget {
   const GameCollectShell({super.key});
 
@@ -65,6 +68,15 @@ class _GameCollectShellState extends State<GameCollectShell> {
   final _collectionNavKey = GlobalKey<NavigatorState>();
   final _discoverNavKey = GlobalKey<NavigatorState>();
   final _achievementsNavKey = GlobalKey<NavigatorState>();
+
+  /// Geordende lijst van navigator-sleutels, één per tabblad.
+  late final List<GlobalKey<NavigatorState>> _navKeys = [
+    _overviewNavKey,
+    _collectionNavKey,
+    _discoverNavKey,
+    _achievementsNavKey,
+  ];
+
   Timer? _achievementDebounce;
 
   @override
@@ -101,6 +113,7 @@ class _GameCollectShellState extends State<GameCollectShell> {
     super.dispose();
   }
 
+  /// Luistert naar databasewijzigingen en controleert achievements via debounce.
   void _onCollectionChangedForAchievements() {
     _achievementDebounce?.cancel();
     _achievementDebounce = Timer(const Duration(milliseconds: 300), () async {
@@ -109,14 +122,16 @@ class _GameCollectShellState extends State<GameCollectShell> {
     });
   }
 
+  /// Toont een snackbar voor pas ontgrendelde achievements en wist de notifier.
   void _onAchievementsUnlocked() {
     final unlocked = AppAchievementService.newlyUnlockedNotifier.value;
     if (unlocked.isEmpty || !mounted) return;
-    // Clear immediately so it won't re-fire
+    // Meteen wissen zodat het niet opnieuw wordt afgevuurd.
     AppAchievementService.newlyUnlockedNotifier.value = [];
     _showAchievementSnackBar(unlocked);
   }
 
+  /// Toont een achievement-snackbar met de naam (of het aantal) van de behaalde achievements.
   void _showAchievementSnackBar(List<AppAchievement> achievements) {
     final count = achievements.length;
     final message = count == 1
@@ -137,24 +152,28 @@ class _GameCollectShellState extends State<GameCollectShell> {
     );
   }
 
+  /// Schakelt naar het collectietabblad als er een zoekverzoek binnenkomt.
   void _onCollectionSearchRequest() {
     if (CollectionPage.searchRequest.value != null) {
       _switchToTabAnimated(1);
     }
   }
 
+  /// Schakelt naar het collectietabblad als er een itemdetailverzoek binnenkomt.
   void _onCollectionItemDetailRequest() {
     if (CollectionPage.itemDetailRequest.value != null) {
       _switchToTab(1);
     }
   }
 
+  /// Schakelt naar het ontdekkingstabblad als er een speldetailverzoek binnenkomt.
   void _onDiscoverGameDetailRequest() {
     if (DiscoverPage.gameDetailRequest.value != null) {
       _switchToTab(2);
     }
   }
 
+  /// Verwerkt tab-schakelverzoeken vanuit het overzicht.
   void _onOverviewSwitchToTabRequest() {
     final index = OverviewPage.switchToTabRequest.value;
     if (index != null) {
@@ -168,15 +187,11 @@ class _GameCollectShellState extends State<GameCollectShell> {
     }
   }
 
+  /// Schakelt direct naar het opgegeven tabblad (zonder animatie).
   void _switchToTab(int index) {
     if (index == _currentIndex) {
-      // Already on this tab: pop to root then scroll to top.
-      if (index == 0) _overviewNavKey.currentState?.popUntil((r) => r.isFirst);
-      if (index == 1)
-        _collectionNavKey.currentState?.popUntil((r) => r.isFirst);
-      if (index == 2) _discoverNavKey.currentState?.popUntil((r) => r.isFirst);
-      if (index == 3)
-        _achievementsNavKey.currentState?.popUntil((r) => r.isFirst);
+      // Al op dit tabblad: navigeer terug naar root en scroll naar boven.
+      _navKeys[index].currentState?.popUntil((r) => r.isFirst);
       _scrollToTopForTab(index);
       return;
     }
@@ -184,19 +199,18 @@ class _GameCollectShellState extends State<GameCollectShell> {
     _pageController.jumpToPage(index);
   }
 
+  /// Stuurt een scroll-naar-boven-verzoek naar het actieve tabblad.
   void _scrollToTopForTab(int index) {
-    switch (index) {
-      case 0:
-        OverviewPage.scrollToTopRequest.value++;
-      case 1:
-        CollectionPage.scrollToTopRequest.value++;
-      case 2:
-        DiscoverPage.scrollToTopRequest.value++;
-      case 3:
-        AchievementsPage.scrollToTopRequest.value++;
-    }
+    final requests = [
+      OverviewPage.scrollToTopRequest,
+      CollectionPage.scrollToTopRequest,
+      DiscoverPage.scrollToTopRequest,
+      AchievementsPage.scrollToTopRequest,
+    ];
+    if (index < requests.length) requests[index].value++;
   }
 
+  /// Schakelt met animatie naar het opgegeven tabblad.
   void _switchToTabAnimated(int index) {
     setState(() => _currentIndex = index);
     _pageController.animateToPage(

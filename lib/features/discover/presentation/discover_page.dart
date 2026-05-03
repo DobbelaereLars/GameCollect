@@ -1,31 +1,37 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gamecollect/features/discover/presentation/widgets/custom_lens_upload_view.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/scale_tap.dart';
 import '../data/rawg_games_api.dart';
+import '../domain/game_search_utils.dart';
 import '../domain/rawg_game.dart';
 import 'game_detail_page.dart';
 import 'widgets/discover_search_bar.dart';
 import '../../../core/preferences/view_preferences.dart';
 
+/// Ontdekken-pagina: zoekt en bladert door games via de RAWG API.
+/// Ondersteunt tekstzoeken, camera-scan via Google Lens en aanpasbare rasterweergave.
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
-  /// Set this to request that the Ontdekken tab opens and pushes the given game.
-  /// The shell listens to switch tabs; DiscoverPage listens to push the detail page.
+  /// Stel in om de Ontdekken-tab te openen en direct naar een game te navigeren.
+  /// De shell luistert om van tab te wisselen; DiscoverPage luistert om de detailpagina te openen.
   static final gameDetailRequest =
       ValueNotifier<
         ({int gameId, String fallbackTitle, String? fallbackCoverUrl})?
       >(null);
 
+  /// Signaal om de lijst terug naar boven te scrollen.
   static final scrollToTopRequest = ValueNotifier<int>(0);
 
   @override
@@ -36,8 +42,10 @@ class _DiscoverPageState extends State<DiscoverPage> {
   static const int _pageSize = 20;
   static const Duration _searchDebounce = Duration(milliseconds: 800);
 
-  String get _rawgApiKey => dotenv.env['RAWG_API_KEY'] ?? '';
+  /// RAWG API-sleutel uit het .env-bestand.
+  String get _rawgApiKey => SecureStorageService.rawgApiKey;
 
+  /// True als de camera-knop getoond moet worden (alleen iOS en Android).
   bool get _showCameraButton {
     if (kIsWeb) {
       return false;
@@ -70,6 +78,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
       ViewPreferences.defaultDiscoverGridColumns; // 2 of 3 kolommen
 
   @override
+  /// Initialiseert de pagina: laadt weergavevoorkeuren, registreert listeners en haalt eerste games op.
+  @override
   void initState() {
     super.initState();
     _loadViewPreference();
@@ -77,7 +87,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     DiscoverPage.gameDetailRequest.addListener(_onGameDetailRequest);
     DiscoverPage.scrollToTopRequest.addListener(_onScrollToTop);
     _fetchGames(reset: true);
-    // Handle requests that arrived before this page was first built
+    // Verwerk verzoeken die al vóór de eerste build binnenkwamen.
     if (DiscoverPage.gameDetailRequest.value != null) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _onGameDetailRequest(),
@@ -97,6 +107,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     super.dispose();
   }
 
+  /// Scrollt de lijst naar boven als het signaal wordt ontvangen.
   void _onScrollToTop() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -107,14 +118,15 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
   }
 
+  /// Verwerkt een verzoek vanuit de shell om een spel-detailpagina te openen.
   void _onGameDetailRequest() {
     final request = DiscoverPage.gameDetailRequest.value;
     if (request == null || !mounted) return;
     DiscoverPage.gameDetailRequest.value = null;
-    // Defer push so the tab switch has completed rendering first
+    // Uitstellen zodat de tabwissel eerst volledig gerenderd is.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Pop any stale detail page so there's never more than one back press
+      // Verwijder eventuele verouderde detailpagina's zodat er nooit meer dan één terugknop is.
       Navigator.of(context).popUntil((route) => route.isFirst);
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
@@ -128,6 +140,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     });
   }
 
+  /// Luistert op de scrollpositie en triggert infinite scroll als de bodem nadert.
   void _onScroll() {
     if (!_scrollController.hasClients || _isInitialLoading || _isLoadingMore) {
       return;
@@ -143,6 +156,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
   }
 
+  /// Haalt games op van de RAWG API. [reset] herstart de lijst; [loadMore] laadt de volgende pagina.
   Future<void> _fetchGames({bool reset = false, bool loadMore = false}) async {
     _slowConnectionTimer?.cancel();
 
@@ -199,7 +213,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
       setState(() {
         // Filter en sorteer alléén de gloednieuwe uit de API opgehaalde games
-        final processedNewGames = _sortGamesByRelevance(
+        final processedNewGames = GameSearchUtils.sortByRelevance(
           page.games,
           _activeQuery,
         );
@@ -263,12 +277,13 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
   }
 
+  /// Debounced handler voor tekstwijzigingen in de zoekbalk.
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(_searchDebounce, () {
       final query = value.trim();
 
-      // Keep API usage low: only search after pause and at least 2 chars.
+      // Minimaliseer API-verzoeken: start pas met zoeken na minimaal 2 tekens.
       if (query.isNotEmpty && query.length < 2) {
         return;
       }
@@ -282,6 +297,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     });
   }
 
+  /// Voert direct een zoekopdracht uit als de gebruiker op 'Zoeken' tikt.
   void _onSearchSubmitted(String value) {
     final query = value.trim();
     if (query == _activeQuery) {
@@ -292,6 +308,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _fetchGames(reset: true);
   }
 
+  /// Wist de zoekbalk en herstelt de standaard gamelijst.
   void _clearSearch() {
     _debounce?.cancel();
 
@@ -304,87 +321,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _fetchGames(reset: true);
   }
 
-  List<RawgGame> _sortGamesByRelevance(List<RawgGame> games, String query) {
-    final normalizedQuery = _normalizeSearchText(query);
-    if (normalizedQuery.isEmpty) {
-      return games;
-    }
-
-    final queryTokens = normalizedQuery
-        .split(' ')
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-
-    // Verwijder games die absoluut niks te maken hebben met de zoekterm
-    final validGames = games.where((g) {
-      final normalizedTitle = _normalizeSearchText(g.title);
-      if (normalizedTitle.contains(normalizedQuery)) return true;
-      for (final t in queryTokens) {
-        if (normalizedTitle.contains(t)) return true;
-      }
-      return false;
-    }).toList();
-
-    validGames.sort((a, b) {
-      final scoreA = _scoreGameRelevance(a.title, normalizedQuery, queryTokens);
-      final scoreB = _scoreGameRelevance(b.title, normalizedQuery, queryTokens);
-
-      if (scoreA != scoreB) {
-        return scoreB.compareTo(scoreA);
-      }
-
-      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-    });
-
-    return validGames;
-  }
-
-  String _normalizeSearchText(String value) {
-    final lowercase = value.toLowerCase();
-    final noSpecialChars = lowercase.replaceAll(RegExp(r"[^a-z0-9\s]"), ' ');
-    return noSpecialChars.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
-
-  int _scoreGameRelevance(
-    String title,
-    String normalizedQuery,
-    List<String> queryTokens,
-  ) {
-    final normalizedTitle = _normalizeSearchText(title);
-    var score = 0;
-
-    if (normalizedTitle == normalizedQuery) {
-      score += 10000;
-    }
-
-    if (normalizedTitle.startsWith(normalizedQuery)) {
-      score += 7000;
-    }
-
-    if (normalizedTitle.contains(normalizedQuery)) {
-      score += 4500;
-    }
-
-    var matchedTokens = 0;
-    for (final token in queryTokens) {
-      if (normalizedTitle.contains(token)) {
-        matchedTokens++;
-      }
-    }
-
-    if (matchedTokens == queryTokens.length) {
-      score += 3000;
-    }
-
-    score += matchedTokens * 220;
-    score -= (queryTokens.length - matchedTokens) * 600;
-
-    final lengthDiff = (normalizedTitle.length - normalizedQuery.length).abs();
-    score += (300 - (lengthDiff * 8)).clamp(0, 300);
-
-    return score;
-  }
-
+  /// Toont een korte snackbar met een bericht.
   void _showSnackBar(String message) {
     if (!mounted) {
       return;
@@ -397,6 +334,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
       );
   }
 
+  /// Opent de camera en start het coverherkenningsproces via Google Lens.
   Future<void> _openCamera() async {
     if (_isOpeningCamera || _isRecognizingCover) {
       return;
@@ -554,6 +492,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
+  /// Wisselt tussen 2- en 3-koloms rasterweergave en slaat de keuze op.
   void _cycleLayout() {
     setState(() {
       _gridColumns = _gridColumns == 2 ? 3 : 2;
@@ -561,6 +500,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     ViewPreferences.setDiscoverGridColumns(_gridColumns);
   }
 
+  /// Laadt de opgeslagen rastervoorkeur en past de UI aan.
   Future<void> _loadViewPreference() async {
     final value = await ViewPreferences.getDiscoverGridColumns();
     if (!mounted) return;
@@ -569,11 +509,13 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
   }
 
+  /// Geeft het icoon voor de volgende rasterschakelstand.
   IconData get _layoutCycleIcon {
     // Toon het icoon dat past bij de VOLGENDE stand.
     return _gridColumns == 2 ? LucideIcons.grid3x3 : LucideIcons.layoutGrid;
   }
 
+  /// Geeft de tooltip-tekst voor de rasterschakelknop.
   String get _layoutCycleTooltip {
     return _gridColumns == 2
         ? 'Toon als 3-koloms raster'
@@ -639,7 +581,29 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     if (_games.isEmpty) {
       return Center(
-        child: Text('Geen games gevonden.', style: textTheme.bodyLarge),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.searchX, size: 48, color: AppTheme.orange500),
+              const SizedBox(height: 16),
+              Text(
+                'Geen games gevonden.',
+                style: textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.black,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Probeer een andere zoekterm of pas de filters aan.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(color: AppTheme.gray500),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -651,6 +615,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 16),
+      physics: const AlwaysScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: 8,
@@ -664,7 +629,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
         }
 
         final game = _games[index];
-        return GestureDetector(
+        return ScaleTap(
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -677,7 +642,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             );
           },
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -689,10 +654,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           size: 34,
                           color: AppTheme.gray300,
                         )
-                      : Image.network(
-                          game.coverUrl!,
+                      : CachedNetworkImage(
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          imageUrl: game.coverUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorWidget: (_, _, _) => Icon(
                             LucideIcons.gamepad2,
                             size: 34,
                             color: AppTheme.gray300,
@@ -794,7 +761,7 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
       }
     });
 
-    // Explicit internet check to fail fast for SocketException
+    // Expliciete internetcontrole om snel te falen bij een SocketException.
     try {
       final result = await InternetAddress.lookup('google.com');
       if (result.isEmpty || result[0].rawAddress.isEmpty) {
@@ -803,7 +770,7 @@ class _CameraSearchDialogState extends State<_CameraSearchDialog> {
     } on SocketException catch (_) {
       _handleError('NETWORK_ERROR');
     } catch (_) {
-      // Ignored, let webview handle other errors
+      // Genegeerd; laat de webview andere fouten afhandelen.
     }
   }
 

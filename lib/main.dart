@@ -8,12 +8,14 @@ import 'dart:async';
 import 'app.dart';
 import 'core/database/database_helper.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/storage/secure_storage_service.dart';
 import 'core/sync/auth_service.dart';
 import 'core/sync/connectivity_service.dart';
 import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme_controller.dart';
 import 'firebase_options.dart';
 
+/// Ingangspunt van de app. Initialiseert alle services voor de UI opstart.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -25,14 +27,17 @@ Future<void> main() async {
   // Laad de opgeslagen thema-voorkeur (auto/licht/donker) zodra mogelijk.
   await AppThemeController.instance.initialize();
 
-  // Keep running even if .env is missing; the Discover page shows a clear message.
+  // Ga door ook als .env ontbreekt; de Ontdekken-pagina toont een duidelijke melding.
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {}
 
+  // Migreer de RAWG API-sleutel naar de veilige opslag (Keychain / EncryptedSharedPreferences).
+  await SecureStorageService.initialize();
+
   await NotificationService.instance.initialize();
 
-  // Schedule daily reminder if notifications are enabled.
+  // Plan een dagelijkse herinnering als notificaties zijn ingeschakeld.
   final notificationsEnabled = await DatabaseHelper.instance
       .getNotificationsEnabled();
   if (notificationsEnabled) {
@@ -40,8 +45,8 @@ Future<void> main() async {
     await NotificationService.instance.scheduleAll();
   }
 
-  // Try to bring up Firebase. The app keeps working in local-only mode if this
-  // fails (e.g. before `flutterfire configure` has been run).
+  // Initialiseer Firebase. De app blijft werken in lokaal-only modus als dit
+  // mislukt (bijv. voor `flutterfire configure` is uitgevoerd).
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -53,7 +58,7 @@ Future<void> main() async {
   await AuthService.instance.initialize();
   await ConnectivityService.instance.initialize();
   await SyncService.instance.wire();
-  // Fire-and-forget initial sync; safe no-op when not signed in or offline.
+  // Voer initiële sync uit op de achtergrond; veilige no-op als niet ingelogd of offline.
   unawaited(SyncService.instance.syncNow());
 
   runApp(const GameCollectApp());

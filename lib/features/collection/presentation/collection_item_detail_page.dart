@@ -2,15 +2,21 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:confetti/confetti.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/storage/secure_storage_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/sync/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/collection_item.dart';
 import '../../achievements/data/app_achievement_service.dart';
@@ -22,6 +28,8 @@ import 'notes_page.dart';
 import 'playtime_page.dart';
 import 'widgets/add_platform_sheet.dart';
 
+/// Detailpagina van een collectie-item: toont en beheert alle eigenschappen
+/// (platforms, tags, achievements, speelduur, notities en voortgang).
 class CollectionItemDetailPage extends StatefulWidget {
   const CollectionItemDetailPage({
     super.key,
@@ -29,7 +37,10 @@ class CollectionItemDetailPage extends StatefulWidget {
     this.openTagsOnStart = false,
   });
 
+  /// Database-ID van het te tonen collectie-item.
   final int itemId;
+
+  /// Als true, wordt de tagbeheer-sectie meteen geopend bij het laden.
   final bool openTagsOnStart;
 
   @override
@@ -46,18 +57,19 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   bool _isLoading = true;
   bool _hasOpenedTagsOnStart = false;
   List<GameAchievementWithState> _achievements = [];
-  // Stable display order — only re-sorted after the delay timer fires
+  // Stabiele weergavevolgorde — alleen opnieuw gesorteerd nadat de vertraging-timer valt.
   List<GameAchievementWithState> _displayAchievements = [];
 
-  // Achievement pagination & delayed sort
-  int _achievementPage = 0;
+  // Paginering van achievements en vertraagde hersortering.
   Timer? _sortTimer;
 
-  // Requirements
+  // Vereisten (requirements)
   List<CustomRequirement> _requirements = [];
   List<CustomRequirement> _displayRequirements = [];
-  int _requirementPage = 0;
   Timer? _requirementSortTimer;
+
+  // Confetti bij 100% voltooiing
+  late final ConfettiController _confettiController;
 
   InputDecoration _orangeInputDecoration({
     String? hintText,
@@ -88,16 +100,26 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
     _loadItem();
   }
 
   @override
   void dispose() {
+    _confettiController.dispose();
     _sortTimer?.cancel();
     _requirementSortTimer?.cancel();
     super.dispose();
   }
 
+  void _playConfetti() {
+    _confettiController.play();
+  }
+
+  /// Laadt het collectie-item en bijbehorende achievements uit de database.
+  /// Haalt achievement-definities automatisch op via RAWG als ze ontbreken.
   Future<void> _loadItem() async {
     setState(() {
       _isLoading = true;
@@ -118,11 +140,11 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       item.achievementStates,
     );
 
-    // Auto-fetch from RAWG when the game has achievement states (synced from
-    // Firebase) but the local game_achievements table has no definitions yet.
-    // This happens when a collection item is restored on a new device.
+    // Auto-fetch via RAWG als het item achievement-statussen heeft (gesynchroniseerd via
+    // Firebase) maar de lokale game_achievements-tabel nog geen definities bevat.
+    // Dit treedt op als een collectie-item op een nieuw toestel hersteld wordt.
     if (achievements.isEmpty && item.achievementStates.isNotEmpty) {
-      final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+      final apiKey = SecureStorageService.rawgApiKey;
       if (apiKey.isNotEmpty) {
         final client = http.Client();
         try {
@@ -150,8 +172,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
       }
     }
 
-    // If achievements exist in game_achievements but states aren't tracked yet
-    // (e.g. game was added before this feature), initialise them.
+    // Als achievements bestaan in game_achievements maar er nog geen statussen zijn
+    // (bijv. de game is toegevoegd vóór deze feature), initialiseer ze dan.
     if (achievements.isNotEmpty && item.achievementStates.isEmpty) {
       final newStates = achievements
           .map(
@@ -190,6 +212,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     }
   }
 
+  /// Slaat een gewijzigd collectie-item op in de database en werkt de UI bij.
   Future<void> _persistItem(CollectionItem updated) async {
     await DatabaseHelper.instance.updateCollectionItem(updated);
     if (!mounted) {
@@ -200,6 +223,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Toont de tag-onboarding bottomsheet voor het eerste gebruik.
   Future<void> _showTagsOnboardingSheet() async {
     final item = _item;
     if (item == null) {
@@ -598,8 +622,8 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
-  // Reschedule the delayed sort — resets the timer on every toggle so rapid
-  // tapping doesn't cause premature reordering.
+  // Herstart de vertraagde sortering — reset de timer bij snel achter elkaar schakelen
+  // om voorbarig herordenen te voorkomen.
   void _scheduleSortDelay() {
     _sortTimer?.cancel();
     _sortTimer = Timer(const Duration(seconds: 2), () {
@@ -629,6 +653,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     ];
   }
 
+  /// Herstart de vertraagde sortering voor vereisten.
   void _scheduleRequirementSortDelay() {
     _requirementSortTimer?.cancel();
     _requirementSortTimer = Timer(const Duration(seconds: 2), () {
@@ -640,13 +665,18 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Markeert een vereiste als voltooid of niet-voltooid en slaat op.
   Future<void> _toggleRequirementCompleted(String id, bool value) async {
     final item = _item;
     if (item == null) return;
+    final previousRatio = item.progressRatio;
     final updated = item.requirements
         .map((r) => r.id == id ? r.copyWith(isCompleted: value) : r)
         .toList(growable: false);
     await _persistItem(item.copyWith(requirements: updated));
+    if (previousRatio < 1.0 && (_item?.progressRatio ?? 0) >= 1.0) {
+      _playConfetti();
+    }
     if (!mounted) return;
     setState(() {
       _requirements = _requirements
@@ -659,6 +689,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     _scheduleRequirementSortDelay();
   }
 
+  /// Schakelt een vereiste in of uit (telt mee of niet in de voortgang).
   Future<void> _toggleRequirementEnabled(String id, bool enabled) async {
     final item = _item;
     if (item == null) return;
@@ -675,6 +706,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Verwijdert een vereiste permanent uit het collectie-item.
   Future<void> _deleteRequirement(String id) async {
     final item = _item;
     if (item == null) return;
@@ -691,9 +723,11 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Markeert een RAWG-achievement als voltooid of niet-voltooid.
   Future<void> _toggleAchievementCompleted(int rawgId, bool value) async {
     final item = _item;
     if (item == null) return;
+    final previousRatio = item.progressRatio;
 
     final baseStates = item.achievementStates.isNotEmpty
         ? item.achievementStates
@@ -712,13 +746,16 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
         .toList(growable: false);
 
     await _persistItem(item.copyWith(achievementStates: updatedStates));
+    if (previousRatio < 1.0 && (_item?.progressRatio ?? 0) >= 1.0) {
+      _playConfetti();
+    }
     if (!mounted) return;
-    // Update the completion state immediately — sorting happens after the delay
+    // Werk de voltooiingsstatus onmiddellijk bij — sortering volgt na de vertraging.
     setState(() {
       _achievements = _achievements
           .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
           .toList(growable: false);
-      // Mirror the change in displayAchievements without resorting yet
+      // Pas de wijziging toe in displayAchievements zonder opnieuw te sorteren.
       _displayAchievements = _displayAchievements
           .map((a) => a.rawgId == rawgId ? a.copyWith(isCompleted: value) : a)
           .toList(growable: false);
@@ -726,6 +763,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     _scheduleSortDelay();
   }
 
+  /// Schakelt een RAWG-achievement in of uit (telt mee of niet in de voortgang).
   Future<void> _toggleAchievementEnabled(int rawgId, bool enabled) async {
     final item = _item;
     if (item == null) return;
@@ -756,6 +794,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     });
   }
 
+  /// Toont een detaildialoog voor een RAWG-achievement.
   void _showAchievementModal(GameAchievementWithState achievement) {
     showDialog<void>(
       context: context,
@@ -775,12 +814,14 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                   Center(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        achievement.imageUrl!,
+                      child: CachedNetworkImage(
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        imageUrl: achievement.imageUrl!,
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorWidget: (_, _, _) => Container(
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
@@ -874,6 +915,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een detaildialoog voor een eigen vereiste.
   void _showRequirementModal(CustomRequirement requirement) {
     showDialog<void>(
       context: context,
@@ -937,6 +979,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een bevestigingssheet vóór het verwijderen van een vereiste.
   Future<void> _showDeleteRequirementConfirmSheet(String id) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1013,6 +1056,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Toont een bottomsheet om een nieuwe eigen vereiste toe te voegen.
   Future<void> _showAddRequirementSheet() async {
     final item = _item;
     if (item == null) return;
@@ -1053,6 +1097,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     );
   }
 
+  /// Formatteert een aantal minuten als leesbare tijdnotatie (bijv. "2u 15m").
   String _formatMinutes(int totalMinutes) {
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
@@ -1062,6 +1107,7 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     return '${hours}u ${minutes}m';
   }
 
+  /// Deelt de voortgang van het spel als tekstbericht via het systeemdeel-menu.
   Future<void> _shareGameProgress(CollectionItem item) async {
     final progress = item.isManuallyCompleted
         ? '100%'
@@ -1189,23 +1235,71 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(item),
+                    _GameDetailHeader(
+                      item: item,
+                      formatMinutes: _formatMinutes,
+                      onEditTags: _showTagsOnboardingSheet,
+                    ),
                     if (_achievements.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                       const SizedBox(height: 24),
-                      _buildAchievementsSection(),
+                      _AchievementsSection(
+                        achievements: _achievements,
+                        displayAchievements: _displayAchievements,
+                        achievementsPerPage: _achievementsPerPage,
+                        onToggleCompleted: _toggleAchievementCompleted,
+                        onToggleEnabled: _toggleAchievementEnabled,
+                        onShowModal: _showAchievementModal,
+                      ),
                     ],
                     const SizedBox(height: 24),
                     Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
-                    _buildRequirementsSection(),
+                    _RequirementsSection(
+                      requirements: _requirements,
+                      displayRequirements: _displayRequirements,
+                      achievementsPerPage: _achievementsPerPage,
+                      onToggleCompleted: _toggleRequirementCompleted,
+                      onToggleEnabled: _toggleRequirementEnabled,
+                      onShowModal: _showRequirementModal,
+                      onAddRequirement: _showAddRequirementSheet,
+                      onDeleteRequirement: _showDeleteRequirementConfirmSheet,
+                    ),
                     const SizedBox(height: 24),
                     Divider(height: 1, thickness: 1, color: AppTheme.gray100),
                     const SizedBox(height: 24),
-                    _buildPlaytimeSummaryTile(item),
+                    _PlaytimeSummaryTile(
+                      formattedTime: _formatMinutes(item.totalPlaytimeMinutes),
+                      zeroPlaytime: item.totalPlaytimeMinutes == 0,
+                      onTap: () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (_) => PlaytimePage(
+                              itemId: item.id!,
+                              gameTitle: item.title,
+                              initialEntries: item.playtimeEntries,
+                            ),
+                          ),
+                        );
+                        final refreshed = await DatabaseHelper.instance
+                            .getCollectionItemById(widget.itemId);
+                        if (mounted && refreshed != null) {
+                          setState(() => _item = refreshed);
+                        }
+                      },
+                    ),
                     const SizedBox(height: 8),
-                    _buildDiscoverTile(item),
+                    _DiscoverTile(
+                      onTap: () {
+                        DiscoverPage.gameDetailRequest.value = null;
+                        DiscoverPage.gameDetailRequest.value = (
+                          gameId: item.apiId,
+                          fallbackTitle: item.title,
+                          fallbackCoverUrl: item.coverUrl,
+                        );
+                      },
+                    ),
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -1266,201 +1360,33 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
               ),
             ),
           ),
+
+          // Confetti-overlay bij 100% voltooiing
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              numberOfParticles: 30,
+              gravity: 0.3,
+              emissionFrequency: 0.05,
+              maxBlastForce: 20,
+              minBlastForce: 8,
+              colors: [
+                AppTheme.orange500,
+                AppTheme.orange400,
+                AppTheme.orange300,
+                AppTheme.orange200,
+                AppTheme.trueWhite,
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(CollectionItem item) {
-    final tagActionLabel = item.activeTags.isEmpty
-        ? 'Tags toevoegen'
-        : 'Tags bewerken';
-    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
-        ? item.selectedPlatforms.first
-        : '';
-    final platformName = _extractPlatformName(primaryPlatformWithFormat);
-    final formatName = _extractFormatName(
-      primaryPlatformWithFormat,
-      fallback: item.format,
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                item.customCoverPath != null
-                    ? Image.file(
-                        File(item.customCoverPath!),
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildCoverPlaceholder(),
-                      )
-                    : (item.coverUrl != null
-                          ? Image.network(
-                              item.coverUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildCoverPlaceholder(),
-                            )
-                          : _buildCoverPlaceholder()),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildCoverBadge(
-                        icon: LucideIcons.gamepad2,
-                        text: platformName,
-                      ),
-                      const SizedBox(height: 6),
-                      _buildCoverBadge(
-                        icon: _formatIconFor(formatName),
-                        text: formatName,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          item.title,
-          style: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 32,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            color: AppTheme.black,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ...item.activeTags.map((tag) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.orange100),
-                ),
-                child: Text(
-                  tag,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: AppTheme.black,
-                  ),
-                ),
-              );
-            }),
-            TextButton(
-              onPressed: _showTagsOnboardingSheet,
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.orange500,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                minimumSize: const Size(0, 0),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(tagActionLabel),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildHeaderMetaRow(
-          icon: LucideIcons.clock3,
-          text: 'Speelduur: ${_formatMinutes(item.totalPlaytimeMinutes)}',
-        ),
-        const SizedBox(height: 6),
-        if (item.publisher != null && item.publisher!.isNotEmpty)
-          _buildHeaderMetaRow(
-            icon: LucideIcons.building,
-            text: item.publisher!,
-          ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: LinearProgressIndicator(
-                value: item.progressRatio,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor: AppTheme.progressTrack,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppTheme.orange500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${(item.progressRatio * 100).round()}%',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: AppTheme.black,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHeaderMetaRow({
-    required IconData icon,
-    required String text,
-    Color? textColor,
-  }) {
-    final color = textColor ?? AppTheme.gray500;
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: AppTheme.gray500),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-              color: color,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _extractPlatformName(String platformWithFormat) {
-    if (platformWithFormat.isEmpty) {
-      return 'Onbekend platform';
-    }
-    final match = RegExp(
-      r'^(.*?)(?:\s*\([^)]*\))?$',
-    ).firstMatch(platformWithFormat);
-    return match?.group(1)?.trim() ?? platformWithFormat;
-  }
-
+  /// Opent de instellingenpagina voor dit collectie-item.
   Future<void> _openSettingsPage(CollectionItem item) async {
     final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
         ? item.selectedPlatforms.first
@@ -1489,685 +1415,6 @@ class _CollectionItemDetailPageState extends State<CollectionItemDetailPage> {
     if (mounted && refreshed != null) {
       setState(() => _item = refreshed);
     }
-  }
-
-  String _extractFormatName(String platformWithFormat, {String? fallback}) {
-    final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
-    final value = match?.group(1)?.trim();
-    if (value != null && value.isNotEmpty) {
-      return value;
-    }
-    return (fallback == null || fallback.isEmpty)
-        ? 'Fysiek & Digitaal'
-        : fallback;
-  }
-
-  IconData _formatIconFor(String formatName) {
-    if (formatName == 'Fysiek') {
-      return LucideIcons.disc;
-    }
-    if (formatName == 'Digitaal') {
-      return LucideIcons.download;
-    }
-    return LucideIcons.layers;
-  }
-
-  Widget _buildCoverBadge({required IconData icon, required String text}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppTheme.orange500),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-              color: AppTheme.orange700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCoverPlaceholder() {
-    return Container(
-      color: AppTheme.orange50,
-      child: Center(
-        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 30),
-      ),
-    );
-  }
-
-  Widget _buildPlaytimeSummaryTile(CollectionItem item) {
-    return GestureDetector(
-      onTap: () async {
-        await Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => PlaytimePage(
-              itemId: item.id!,
-              gameTitle: item.title,
-              initialEntries: item.playtimeEntries,
-            ),
-          ),
-        );
-        final refreshed = await DatabaseHelper.instance.getCollectionItemById(
-          widget.itemId,
-        );
-        if (mounted && refreshed != null) {
-          setState(() => _item = refreshed);
-        }
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          border: Border.all(color: AppTheme.gray100),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.orange50,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.clock,
-                size: 18,
-                color: AppTheme.orange600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Speelduur',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                  Text(
-                    item.totalPlaytimeMinutes == 0
-                        ? 'Nog geen speelduur geregistreerd'
-                        : _formatMinutes(item.totalPlaytimeMinutes),
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: item.totalPlaytimeMinutes == 0
-                          ? AppTheme.gray300
-                          : AppTheme.gray500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDiscoverTile(CollectionItem item) {
-    return GestureDetector(
-      onTap: () {
-        // Cycle through null so the same game can be requested multiple times
-        DiscoverPage.gameDetailRequest.value = null;
-        DiscoverPage.gameDetailRequest.value = (
-          gameId: item.apiId,
-          fallbackTitle: item.title,
-          fallbackCoverUrl: item.coverUrl,
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          border: Border.all(color: AppTheme.gray100),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.orange50,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                LucideIcons.search,
-                size: 18,
-                color: AppTheme.orange600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bekijk in Ontdekken',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.black,
-                    ),
-                  ),
-                  Text(
-                    'Bekijk de gamepagina met details.',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppTheme.gray500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAchievementsSection() {
-    // No achievements -> hide entire section
-    if (_achievements.isEmpty) return const SizedBox.shrink();
-
-    final enabled = _displayAchievements.where((a) => a.isEnabled).toList();
-    final disabled = _achievements.where((a) => !a.isEnabled).toList();
-    final completedCount = enabled.where((a) => a.isCompleted).length;
-    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
-
-    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
-    final safePage = _achievementPage.clamp(0, totalPages - 1);
-    final pageStart = safePage * _achievementsPerPage;
-    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
-    final pageItems = enabled.sublist(pageStart, pageEnd);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header row
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Achievements',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                  color: AppTheme.black,
-                ),
-              ),
-            ),
-            // Score — oranje als alles afgevinkt
-            Text(
-              '$completedCount/${enabled.length}',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: allDone ? AppTheme.orange500 : AppTheme.gray500,
-              ),
-            ),
-            const SizedBox(width: 16),
-            // Eye icon -- zelfde grootte als score, oranje
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DisabledAchievementsPage(
-                    initialAchievements: disabled,
-                    onToggleCompleted: _toggleAchievementCompleted,
-                    onToggleEnabled: _toggleAchievementEnabled,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    LucideIcons.eyeOff,
-                    size: 12,
-                    color: AppTheme.orange500,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '(${disabled.length})',
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                      color: AppTheme.orange500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-
-        // Paginated enabled achievements
-        ...pageItems.map((a) => _buildAchievementTile(a)),
-
-        // Pagination controls -- fixed-width counter prevents button drift
-        if (totalPages > 1) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildPageButton(
-                icon: LucideIcons.chevronLeft,
-                enabled: safePage > 0,
-                onTap: () => setState(() => _achievementPage = safePage - 1),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '${safePage + 1} / $totalPages',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.gray700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildPageButton(
-                icon: LucideIcons.chevronRight,
-                enabled: safePage < totalPages - 1,
-                onTap: () => setState(() => _achievementPage = safePage + 1),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildPageButton({
-    required IconData icon,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: enabled ? AppTheme.orange50 : AppTheme.gray100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: enabled ? AppTheme.orange200 : AppTheme.gray100,
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: enabled ? AppTheme.orange700 : AppTheme.gray300,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAchievementTile(GameAchievementWithState achievement) {
-    final isDisabled = !achievement.isEnabled;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: Checkbox(
-              value: achievement.isCompleted,
-              onChanged: isDisabled
-                  ? null
-                  : (value) => _toggleAchievementCompleted(
-                      achievement.rawgId,
-                      value ?? false,
-                    ),
-              activeColor: AppTheme.orange500,
-              side: BorderSide(
-                color: isDisabled ? AppTheme.gray300 : AppTheme.gray300,
-              ),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: InkWell(
-              onTap: () => _showAchievementModal(achievement),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: achievement.imageUrl != null
-                          ? Image.network(
-                              achievement.imageUrl!,
-                              width: 36,
-                              height: 36,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildAchievementImagePlaceholder(),
-                            )
-                          : _buildAchievementImagePlaceholder(),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        achievement.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          height: 1.4,
-                          color: isDisabled ? AppTheme.gray300 : AppTheme.black,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _toggleAchievementEnabled(
-              achievement.rawgId,
-              !achievement.isEnabled,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.eyeOff,
-                size: 18,
-                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAchievementImagePlaceholder() {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: AppTheme.orange50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Icon(
-        LucideIcons.trophy,
-        size: 18,
-        color: AppTheme.orange300,
-      ),
-    );
-  }
-
-  Widget _buildRequirementsSection() {
-    final enabled = _displayRequirements.where((r) => r.isEnabled).toList();
-    final disabled = _requirements.where((r) => !r.isEnabled).toList();
-    final completedCount = enabled.where((r) => r.isCompleted).length;
-    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
-
-    final totalPages = max(1, (enabled.length / _achievementsPerPage).ceil());
-    final safePage = _requirementPage.clamp(0, totalPages - 1);
-    final pageStart = safePage * _achievementsPerPage;
-    final pageEnd = min(pageStart + _achievementsPerPage, enabled.length);
-    final pageItems = enabled.isEmpty
-        ? <CustomRequirement>[]
-        : enabled.sublist(pageStart, pageEnd);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Vereisten',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                  color: AppTheme.black,
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: _showAddRequirementSheet,
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(
-                  LucideIcons.plus,
-                  size: 18,
-                  color: AppTheme.orange500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              '$completedCount/${enabled.length}',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: allDone && enabled.isNotEmpty
-                    ? AppTheme.orange500
-                    : AppTheme.gray500,
-              ),
-            ),
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DisabledRequirementsPage(
-                    initialRequirements: disabled,
-                    onToggleCompleted: _toggleRequirementCompleted,
-                    onToggleEnabled: _toggleRequirementEnabled,
-                    onDelete: _deleteRequirement,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    LucideIcons.eyeOff,
-                    size: 12,
-                    color: AppTheme.orange500,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '(${disabled.length})',
-                    style: const TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                      color: AppTheme.orange500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if (enabled.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Nog geen vereisten. Tik op + om er een toe te voegen.',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                height: 1.5,
-                color: AppTheme.gray500,
-              ),
-            ),
-          )
-        else
-          ...pageItems.map((r) => _buildRequirementTile(r)),
-        if (totalPages > 1) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildPageButton(
-                icon: LucideIcons.chevronLeft,
-                enabled: safePage > 0,
-                onTap: () => setState(() => _requirementPage = safePage - 1),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '${safePage + 1} / $totalPages',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.gray700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildPageButton(
-                icon: LucideIcons.chevronRight,
-                enabled: safePage < totalPages - 1,
-                onTap: () => setState(() => _requirementPage = safePage + 1),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildRequirementTile(CustomRequirement requirement) {
-    final isDisabled = !requirement.isEnabled;
-    final displayText = requirement.title?.isNotEmpty == true
-        ? requirement.title!
-        : requirement.description;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: Checkbox(
-              value: requirement.isCompleted,
-              onChanged: isDisabled
-                  ? null
-                  : (value) => _toggleRequirementCompleted(
-                      requirement.id,
-                      value ?? false,
-                    ),
-              activeColor: AppTheme.orange500,
-              side: BorderSide(color: AppTheme.gray300),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: InkWell(
-              onTap: () => _showRequirementModal(requirement),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Text(
-                  displayText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                    height: 1.4,
-                    color: isDisabled ? AppTheme.gray300 : AppTheme.black,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _toggleRequirementEnabled(
-              requirement.id,
-              !requirement.isEnabled,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.eyeOff,
-                size: 18,
-                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _showDeleteRequirementConfirmSheet(requirement.id),
-            child: Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(
-                LucideIcons.trash2,
-                size: 18,
-                color: AppTheme.gray500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -2277,7 +1524,7 @@ class _AddRequirementSheetContentState
                   ).copyWith(
                     suffix: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _titleController,
-                      builder: (_, v, __) => Text(
+                      builder: (_, v, _) => Text(
                         '${v.text.length}/30',
                         style: TextStyle(
                           fontFamily: 'Manrope',
@@ -2308,7 +1555,7 @@ class _AddRequirementSheetContentState
                     suffix: _descFocused
                         ? ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _descriptionController,
-                            builder: (_, v, __) => Text(
+                            builder: (_, v, _) => Text(
                               '${v.text.length}/250',
                               style: TextStyle(
                                 fontFamily: 'Manrope',
@@ -2325,7 +1572,7 @@ class _AddRequirementSheetContentState
             const SizedBox(height: 24),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _descriptionController,
-              builder: (_, descValue, __) {
+              builder: (_, descValue, _) {
                 final canSave = !_isSaving && descValue.text.trim().isNotEmpty;
                 return ElevatedButton.icon(
                   onPressed: canSave
@@ -2336,6 +1583,7 @@ class _AddRequirementSheetContentState
                             _descriptionController.text.trim(),
                           );
                           if (!mounted) return;
+                          // ignore: use_build_context_synchronously
                           Navigator.of(context).pop();
                         }
                       : null,
@@ -2403,18 +1651,33 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   late bool _isManuallyCompleted;
   late String? _customCoverPath;
+  late String? _cloudCoverUrl;
+  bool _isCoverUploading = false;
+  int _coverVersion = 0; // versieteller zodat Image.file altijd herladen wordt
   String _currentPlatformWithFormat = '';
   bool _hasMultiplePlatforms = false;
   List<String> _availablePlatforms = [];
   Set<String> _alreadyAddedPlatformNames = {};
   bool _isRefreshing = false;
+  late final ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
     _isManuallyCompleted = widget.item.isManuallyCompleted;
-    _customCoverPath = widget.item.customCoverPath;
+    _cloudCoverUrl = widget.item.cloudCoverUrl;
+    // Valideer het lokale pad: als het bestand verdwenen is (bijv. temp-pad
+    // na app-herstart), zet naar null zodat de cloudCoverUrl fallback werkt.
+    final savedPath = widget.item.customCoverPath;
+    if (savedPath != null && File(savedPath).existsSync()) {
+      _customCoverPath = savedPath;
+    } else {
+      _customCoverPath = null;
+    }
     _currentPlatformWithFormat = widget.platformWithFormat;
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
     _loadPlatformCount();
   }
 
@@ -2452,6 +1715,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
   static String _platformNameFrom(String platformWithFormat) {
     if (platformWithFormat.isEmpty) return '';
     final match = RegExp(
@@ -2464,6 +1733,8 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     isManuallyCompleted: _isManuallyCompleted,
     customCoverPath: _customCoverPath,
     clearCustomCoverPath: _customCoverPath == null,
+    cloudCoverUrl: _cloudCoverUrl,
+    clearCloudCoverUrl: _cloudCoverUrl == null,
   );
 
   Future<void> _save() async {
@@ -2472,21 +1743,146 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     widget.onItemChanged?.call(updated);
   }
 
+  /// Comprimeert [srcPath] → [destPath] als JPEG en blijft kwaliteit verlagen
+  /// totdat het bestand onder [maxBytes] (standaard 500 KB) zit.
+  /// Werkt voor jpg, png, heic, webp en andere door flutter_image_compress
+  /// ondersteunde invoerformaten.
+  Future<String> _compressImage(
+    String srcPath,
+    String destPath, {
+    int maxBytes = 500 * 1024,
+  }) async {
+    const qualities = [80, 65, 50, 35, 20];
+
+    // Poging 1: compressAndGetFile (snelst, schrijft direct naar schijf).
+    for (final q in qualities) {
+      try {
+        final result = await FlutterImageCompress.compressAndGetFile(
+          srcPath,
+          destPath,
+          minWidth: 1280,
+          minHeight: 720,
+          quality: q,
+          format: CompressFormat.jpeg,
+          keepExif: false,
+        );
+        if (result != null && File(result.path).lengthSync() <= maxBytes) {
+          return result.path;
+        }
+      } catch (_) {
+        break; // onbekend formaat of platform-fout → naar bytes-fallback
+      }
+    }
+
+    // Poging 2: bytes-gebaseerde fallback (beter voor HEIC, WebP, PNG op iOS).
+    for (final q in qualities) {
+      try {
+        final bytes = await FlutterImageCompress.compressWithFile(
+          srcPath,
+          minWidth: 1280,
+          minHeight: 720,
+          quality: q,
+          format: CompressFormat.jpeg,
+          keepExif: false,
+        );
+        if (bytes != null) {
+          await File(destPath).writeAsBytes(bytes, flush: true);
+          if (File(destPath).lengthSync() <= maxBytes) return destPath;
+        }
+      } catch (_) {
+        break;
+      }
+    }
+
+    // Laatste noodvallback: plain copy (geen compressie, maar de upload gaat door).
+    await File(srcPath).copy(destPath);
+    return destPath;
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    setState(() => _customCoverPath = picked.path);
-    await _save();
+
+    // Stap 1: toon skeleton terwijl de afbeelding wordt verwerkt.
+    if (mounted) setState(() => _isCoverUploading = true);
+
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final itemId = widget.item.id;
+      final destPath = '${dir.path}/covers/$itemId.jpg';
+      await Directory('${dir.path}/covers').create(recursive: true);
+
+      // Stap 2: verwijder de oude afbeelding uit Flutter's ImageCache zodat
+      // Image.file de nieuwe versie laadt en niet de gecachte oude.
+      imageCache.evict(FileImage(File(destPath)));
+      // Ook de vorige cloudCoverUrl uit de netwerk-cache verwijderen.
+      if (_cloudCoverUrl != null) {
+        await CachedNetworkImage.evictFromCache(_cloudCoverUrl!);
+      }
+
+      // Stap 3: comprimeer tot onder 500 KB.
+      final finalPath = await _compressImage(picked.path, destPath);
+
+      // Stap 4: toon de lokale afbeelding meteen — skeleton verdwijnt hier.
+      // Evict opnieuw NA het schrijven zodat Flutter de nieuw geschreven versie
+      // laadt en niet een versie die tijdens de compressie opnieuw gecachet werd.
+      imageCache.evict(FileImage(File(finalPath)));
+      if (mounted) {
+        setState(() {
+          _customCoverPath = finalPath;
+          _cloudCoverUrl = null; // reset zodat Image.file prioriteit heeft
+          _isCoverUploading = false;
+          _coverVersion++; // forceert nieuwe widget-instantie → zeker herladen
+        });
+      }
+      await _save();
+
+      // Stap 5: upload naar Storage op de achtergrond (UI staat niet te wachten).
+      final uid = _currentUid();
+      if (uid != null && itemId != null) {
+        try {
+          final ref = FirebaseStorage.instance.ref().child(
+            'users/$uid/covers/$itemId.jpg',
+          );
+          await ref.putFile(
+            File(finalPath),
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          final cloudUrl = await ref.getDownloadURL();
+          if (mounted) setState(() => _cloudCoverUrl = cloudUrl);
+          await _save();
+        } catch (_) {
+          // Upload mislukt — lokale afbeelding blijft zichtbaar, cloud sync later.
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isCoverUploading = false);
+    }
   }
 
   Future<void> _removeCover() async {
-    setState(() => _customCoverPath = null);
+    // Verwijder uit Firebase Storage als er een cloud-URL is.
+    final uid = _currentUid();
+    if (uid != null && _cloudCoverUrl != null) {
+      try {
+        final itemId = widget.item.id;
+        if (itemId != null) {
+          await FirebaseStorage.instance
+              .ref()
+              .child('users/$uid/covers/$itemId.jpg')
+              .delete();
+        }
+      } catch (_) {}
+    }
+    setState(() {
+      _customCoverPath = null;
+      _cloudCoverUrl = null;
+    });
     await _save();
   }
+
+  String? _currentUid() => AuthService.instance.uid;
 
   Future<void> _showRestoreCoverSheet() async {
     await showModalBottomSheet<void>(
@@ -2566,6 +1962,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   Future<void> _toggleCompleted(bool value) async {
     setState(() => _isManuallyCompleted = value);
+    if (value) _confettiController.play();
     await _save();
   }
 
@@ -2722,60 +2119,120 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.white,
-      appBar: AppBar(
-        backgroundColor: AppTheme.white,
-        foregroundColor: AppTheme.black,
-        surfaceTintColor: AppTheme.white,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Instellingen',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: AppTheme.black,
-            fontWeight: FontWeight.w700,
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppTheme.white,
+          appBar: AppBar(
+            backgroundColor: AppTheme.white,
+            foregroundColor: AppTheme.black,
+            surfaceTintColor: AppTheme.white,
+            leading: IconButton(
+              icon: const Icon(LucideIcons.chevronLeft),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Text(
+              'Instellingen',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: AppTheme.black,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          body: SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCoverSection(),
+                  const SizedBox(height: 24),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildCompletedRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildFormatRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  if (_availablePlatforms
+                      .where((p) => !_alreadyAddedPlatformNames.contains(p))
+                      .isNotEmpty) ...[
+                    _buildAddPlatformRow(),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  ],
+                  _buildRefreshDataRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  _buildDeleteFromPlatformRow(),
+                  Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  if (_hasMultiplePlatforms) ...[
+                    _buildDeleteFromAllRow(),
+                    Divider(height: 1, thickness: 1, color: AppTheme.gray100),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildCoverSection(),
-              const SizedBox(height: 24),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildCompletedRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildFormatRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              if (_availablePlatforms
-                  .where((p) => !_alreadyAddedPlatformNames.contains(p))
-                  .isNotEmpty) ...[
-                _buildAddPlatformRow(),
-                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              ],
-              _buildRefreshDataRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              _buildDeleteFromPlatformRow(),
-              Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              if (_hasMultiplePlatforms) ...[
-                _buildDeleteFromAllRow(),
-                Divider(height: 1, thickness: 1, color: AppTheme.gray100),
-              ],
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 30,
+            gravity: 0.3,
+            emissionFrequency: 0.05,
+            maxBlastForce: 20,
+            minBlastForce: 8,
+            colors: [
+              AppTheme.orange500,
+              AppTheme.orange400,
+              AppTheme.orange300,
+              AppTheme.orange200,
+              AppTheme.trueWhite,
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildCoverSection() {
+    // Skeleton als er verwerkt wordt (compressie), vóór de lokale file beschikbaar is.
+    // Na compressie verdwijnt de skeleton en toont de lokale afbeelding meteen.
+    if (_isCoverUploading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: _CoverUploadingSkeleton(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: null, // uitgeschakeld tijdens verwerking
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.orange300,
+              side: const BorderSide(color: AppTheme.orange300),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(LucideIcons.imagePlus, size: 18),
+            label: const Text(
+              'Kies uit galerij',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     late Widget coverWidget;
     if (_customCoverPath != null) {
       coverWidget = ClipRRect(
@@ -2787,9 +2244,59 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
             children: [
               Image.file(
                 File(_customCoverPath!),
+                key: ValueKey('cover_local_$_coverVersion'),
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => _buildCoverFallback(),
+                errorBuilder: (_, _, _) => _buildCoverFallback(),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x00000000), Color(0xAA000000)],
+                    ),
+                  ),
+                  child: TextButton.icon(
+                    onPressed: _showRestoreCoverSheet,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.trueWhite,
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                    ),
+                    icon: const Icon(LucideIcons.refreshCcw, size: 16),
+                    label: const Text(
+                      'Standaard afbeelding herstellen',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (_cloudCoverUrl != null) {
+      coverWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                imageUrl: _cloudCoverUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) => _buildCoverFallback(),
               ),
               Positioned(
                 left: 0,
@@ -2830,10 +2337,12 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         borderRadius: BorderRadius.circular(12),
         child: AspectRatio(
           aspectRatio: 16 / 9,
-          child: Image.network(
-            widget.item.coverUrl!,
+          child: CachedNetworkImage(
+            fadeInDuration: Duration.zero,
+            fadeOutDuration: Duration.zero,
+            imageUrl: widget.item.coverUrl!,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildCoverFallback(),
+            errorWidget: (_, _, _) => _buildCoverFallback(),
           ),
         ),
       );
@@ -3171,7 +2680,7 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 
   Future<void> _refreshGameData() async {
-    final apiKey = dotenv.env['RAWG_API_KEY'] ?? '';
+    final apiKey = SecureStorageService.rawgApiKey;
     if (apiKey.isEmpty) return;
     setState(() => _isRefreshing = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -3348,5 +2857,1127 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
   }
 }
 
-// ── Add Platform Sheet ────────────────────────────────────────────────────────
-// Delegated to widgets/add_platform_sheet.dart (AddPlatformSheet)
+// ── Platform toevoegen ────────────────────────────────────────────────────────
+// Gedelegeerd naar widgets/add_platform_sheet.dart (AddPlatformSheet)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top-level utility functions (pure, stateless)
+// ─────────────────────────────────────────────────────────────────────────────
+
+String _extractPlatformName(String platformWithFormat) {
+  if (platformWithFormat.isEmpty) return 'Onbekend platform';
+  final match = RegExp(
+    r'^(.*?)(?:\s*\([^)]*\))?$',
+  ).firstMatch(platformWithFormat);
+  return match?.group(1)?.trim() ?? platformWithFormat;
+}
+
+String _extractFormatName(String platformWithFormat, {String? fallback}) {
+  final match = RegExp(r'\((.*?)\)$').firstMatch(platformWithFormat);
+  final value = match?.group(1)?.trim();
+  if (value != null && value.isNotEmpty) return value;
+  return (fallback == null || fallback.isEmpty)
+      ? 'Fysiek & Digitaal'
+      : fallback;
+}
+
+IconData _formatIconFor(String formatName) {
+  if (formatName == 'Fysiek') return LucideIcons.disc;
+  if (formatName == 'Digitaal') return LucideIcons.download;
+  return LucideIcons.layers;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _GameDetailHeader — hero section: cover, title, tags, meta, progress bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GameDetailHeader extends StatelessWidget {
+  const _GameDetailHeader({
+    required this.item,
+    required this.formatMinutes,
+    required this.onEditTags,
+  });
+
+  final CollectionItem item;
+  final String Function(int) formatMinutes;
+  final VoidCallback onEditTags;
+
+  @override
+  Widget build(BuildContext context) {
+    final tagActionLabel = item.activeTags.isEmpty
+        ? 'Tags toevoegen'
+        : 'Tags bewerken';
+    final primaryPlatformWithFormat = item.selectedPlatforms.isNotEmpty
+        ? item.selectedPlatforms.first
+        : '';
+    final platformName = _extractPlatformName(primaryPlatformWithFormat);
+    final formatName = _extractFormatName(
+      primaryPlatformWithFormat,
+      fallback: item.format,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                (item.customCoverPath != null &&
+                        File(item.customCoverPath!).existsSync())
+                    ? Image.file(
+                        File(item.customCoverPath!),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) => const _CoverPlaceholder(),
+                      )
+                    : (item.cloudCoverUrl != null
+                          ? CachedNetworkImage(
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              imageUrl: item.cloudCoverUrl!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, _, _) =>
+                                  const _CoverPlaceholder(),
+                            )
+                          : (item.coverUrl != null
+                                ? CachedNetworkImage(
+                                    fadeInDuration: Duration.zero,
+                                    fadeOutDuration: Duration.zero,
+                                    imageUrl: item.coverUrl!,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, _, _) =>
+                                        const _CoverPlaceholder(),
+                                  )
+                                : const _CoverPlaceholder())),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _CoverBadge(
+                        icon: LucideIcons.gamepad2,
+                        text: platformName,
+                      ),
+                      const SizedBox(height: 6),
+                      _CoverBadge(
+                        icon: _formatIconFor(formatName),
+                        text: formatName,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          item.title,
+          style: TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+            color: AppTheme.black,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ...item.activeTags.map(
+              (tag) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.orange100),
+                ),
+                child: Text(
+                  tag,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    color: AppTheme.black,
+                  ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onEditTags,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.orange500,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(tagActionLabel),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _HeaderMetaRow(
+          icon: LucideIcons.clock3,
+          text: 'Speelduur: ${formatMinutes(item.totalPlaytimeMinutes)}',
+        ),
+        const SizedBox(height: 6),
+        if (item.publisher != null && item.publisher!.isNotEmpty)
+          _HeaderMetaRow(icon: LucideIcons.building, text: item.publisher!),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                label: 'Voortgang',
+                value: '${(item.progressRatio * 100).round()}%',
+                child: LinearProgressIndicator(
+                  value: item.progressRatio,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(999),
+                  backgroundColor: AppTheme.progressTrack,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppTheme.orange500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '${(item.progressRatio * 100).round()}%',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: AppTheme.black,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CoverBadge — icoon + tekst badge op omslagafbeelding
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CoverBadge extends StatelessWidget {
+  const _CoverBadge({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppTheme.orange500),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+              color: AppTheme.orange700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CoverPlaceholder — placeholder als er geen omslagafbeelding is
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CoverPlaceholder extends StatelessWidget {
+  const _CoverPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.orange50,
+      child: Center(
+        child: Icon(LucideIcons.gamepad2, color: AppTheme.black, size: 30),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _HeaderMetaRow — icoon + tekst rij in de header
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeaderMetaRow extends StatelessWidget {
+  const _HeaderMetaRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: AppTheme.gray500),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.4,
+              color: AppTheme.gray500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _PlaytimeSummaryTile — tegel die navigeert naar de speelduurpagina
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PlaytimeSummaryTile extends StatelessWidget {
+  const _PlaytimeSummaryTile({
+    required this.formattedTime,
+    required this.zeroPlaytime,
+    required this.onTap,
+  });
+
+  final String formattedTime;
+  final bool zeroPlaytime;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.clock,
+                size: 18,
+                color: AppTheme.orange600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Speelduur',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  Text(
+                    zeroPlaytime
+                        ? 'Nog geen speelduur geregistreerd'
+                        : formattedTime,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: zeroPlaytime ? AppTheme.gray300 : AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _DiscoverTile — tegel die navigeert naar de gamepagina in Ontdekken
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DiscoverTile extends StatelessWidget {
+  const _DiscoverTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          border: Border.all(color: AppTheme.gray100),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.orange50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                LucideIcons.search,
+                size: 18,
+                color: AppTheme.orange600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bekijk in Ontdekken',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.black,
+                    ),
+                  ),
+                  Text(
+                    'Bekijk de gamepagina met details.',
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.gray500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.gray300),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _PaginationButton — pijlknop voor paginering
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PaginationButton extends StatelessWidget {
+  const _PaginationButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? AppTheme.orange50 : AppTheme.gray100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: enabled ? AppTheme.orange200 : AppTheme.gray100,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? AppTheme.orange700 : AppTheme.gray300,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementImagePlaceholder — fallback afbeelding voor achievements
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementImagePlaceholder extends StatelessWidget {
+  const _AchievementImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppTheme.orange50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Icon(
+        LucideIcons.trophy,
+        size: 18,
+        color: AppTheme.orange300,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementTile — één rij in de achievementlijst
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementTile extends StatelessWidget {
+  const _AchievementTile({
+    required this.achievement,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+  });
+
+  final GameAchievementWithState achievement;
+  final Future<void> Function(int rawgId, bool value) onToggleCompleted;
+  final Future<void> Function(int rawgId, bool value) onToggleEnabled;
+  final void Function(GameAchievementWithState) onShowModal;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = !achievement.isEnabled;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: achievement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) =>
+                        onToggleCompleted(achievement.rawgId, value ?? false),
+              activeColor: AppTheme.orange500,
+              side: BorderSide(color: AppTheme.gray300),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => onShowModal(achievement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: achievement.imageUrl != null
+                          ? CachedNetworkImage(
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              imageUrl: achievement.imageUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, _, _) =>
+                                  const _AchievementImagePlaceholder(),
+                            )
+                          : const _AchievementImagePlaceholder(),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        achievement.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                          color: isDisabled ? AppTheme.gray300 : AppTheme.black,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () =>
+                onToggleEnabled(achievement.rawgId, !achievement.isEnabled),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _RequirementTile — één rij in de vereistenlijst
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RequirementTile extends StatelessWidget {
+  const _RequirementTile({
+    required this.requirement,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+    required this.onDelete,
+  });
+
+  final CustomRequirement requirement;
+  final Future<void> Function(String id, bool value) onToggleCompleted;
+  final Future<void> Function(String id, bool value) onToggleEnabled;
+  final void Function(CustomRequirement) onShowModal;
+  final Future<void> Function(String id) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = !requirement.isEnabled;
+    final displayText = requirement.title?.isNotEmpty == true
+        ? requirement.title!
+        : requirement.description;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: Checkbox(
+              value: requirement.isCompleted,
+              onChanged: isDisabled
+                  ? null
+                  : (value) =>
+                        onToggleCompleted(requirement.id, value ?? false),
+              activeColor: AppTheme.orange500,
+              side: BorderSide(color: AppTheme.gray300),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              onTap: () => onShowModal(requirement),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Text(
+                  displayText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    color: isDisabled ? AppTheme.gray300 : AppTheme.black,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () =>
+                onToggleEnabled(requirement.id, !requirement.isEnabled),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.eyeOff,
+                size: 18,
+                color: isDisabled ? AppTheme.orange400 : AppTheme.gray300,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => onDelete(requirement.id),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                LucideIcons.trash2,
+                size: 18,
+                color: AppTheme.gray500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AchievementsSection — stateful sectie met paginering voor achievements
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AchievementsSection extends StatefulWidget {
+  const _AchievementsSection({
+    required this.achievements,
+    required this.displayAchievements,
+    required this.achievementsPerPage,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+  });
+
+  final List<GameAchievementWithState> achievements;
+  final List<GameAchievementWithState> displayAchievements;
+  final int achievementsPerPage;
+  final Future<void> Function(int rawgId, bool value) onToggleCompleted;
+  final Future<void> Function(int rawgId, bool value) onToggleEnabled;
+  final void Function(GameAchievementWithState) onShowModal;
+
+  @override
+  State<_AchievementsSection> createState() => _AchievementsSectionState();
+}
+
+class _AchievementsSectionState extends State<_AchievementsSection> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.displayAchievements
+        .where((a) => a.isEnabled)
+        .toList();
+    final disabled = widget.achievements.where((a) => !a.isEnabled).toList();
+    final completedCount = enabled.where((a) => a.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(
+      1,
+      (enabled.length / widget.achievementsPerPage).ceil(),
+    );
+    final safePage = _page.clamp(0, totalPages - 1);
+    final pageStart = safePage * widget.achievementsPerPage;
+    final pageEnd = min(pageStart + widget.achievementsPerPage, enabled.length);
+    final pageItems = enabled.sublist(pageStart, pageEnd);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Achievements',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: allDone ? AppTheme.orange500 : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledAchievementsPage(
+                    initialAchievements: disabled,
+                    onToggleCompleted: widget.onToggleCompleted,
+                    onToggleEnabled: widget.onToggleEnabled,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ...pageItems.map(
+          (a) => _AchievementTile(
+            achievement: a,
+            onToggleCompleted: widget.onToggleCompleted,
+            onToggleEnabled: widget.onToggleEnabled,
+            onShowModal: widget.onShowModal,
+          ),
+        ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PaginationButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () => setState(() => _page = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _PaginationButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () => setState(() => _page = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _RequirementsSection — stateful sectie met paginering voor vereisten
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RequirementsSection extends StatefulWidget {
+  const _RequirementsSection({
+    required this.requirements,
+    required this.displayRequirements,
+    required this.achievementsPerPage,
+    required this.onToggleCompleted,
+    required this.onToggleEnabled,
+    required this.onShowModal,
+    required this.onAddRequirement,
+    required this.onDeleteRequirement,
+  });
+
+  final List<CustomRequirement> requirements;
+  final List<CustomRequirement> displayRequirements;
+  final int achievementsPerPage;
+  final Future<void> Function(String id, bool value) onToggleCompleted;
+  final Future<void> Function(String id, bool value) onToggleEnabled;
+  final void Function(CustomRequirement) onShowModal;
+  final VoidCallback onAddRequirement;
+  final Future<void> Function(String id) onDeleteRequirement;
+
+  @override
+  State<_RequirementsSection> createState() => _RequirementsSectionState();
+}
+
+class _RequirementsSectionState extends State<_RequirementsSection> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.displayRequirements
+        .where((r) => r.isEnabled)
+        .toList();
+    final disabled = widget.requirements.where((r) => !r.isEnabled).toList();
+    final completedCount = enabled.where((r) => r.isCompleted).length;
+    final allDone = enabled.isNotEmpty && completedCount == enabled.length;
+
+    final totalPages = max(
+      1,
+      (enabled.length / widget.achievementsPerPage).ceil(),
+    );
+    final safePage = _page.clamp(0, totalPages - 1);
+    final pageStart = safePage * widget.achievementsPerPage;
+    final pageEnd = min(pageStart + widget.achievementsPerPage, enabled.length);
+    final pageItems = enabled.isEmpty
+        ? <CustomRequirement>[]
+        : enabled.sublist(pageStart, pageEnd);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Vereisten',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: AppTheme.black,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: widget.onAddRequirement,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  LucideIcons.plus,
+                  size: 18,
+                  color: AppTheme.orange500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '$completedCount/${enabled.length}',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: allDone && enabled.isNotEmpty
+                    ? AppTheme.orange500
+                    : AppTheme.gray500,
+              ),
+            ),
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DisabledRequirementsPage(
+                    initialRequirements: disabled,
+                    onToggleCompleted: widget.onToggleCompleted,
+                    onToggleEnabled: widget.onToggleEnabled,
+                    onDelete: widget.onDeleteRequirement,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.eyeOff,
+                    size: 12,
+                    color: AppTheme.orange500,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '(${disabled.length})',
+                    style: const TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppTheme.orange500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (enabled.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Nog geen vereisten. Tik op + om er een toe te voegen.',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+                color: AppTheme.gray500,
+              ),
+            ),
+          )
+        else
+          ...pageItems.map(
+            (r) => _RequirementTile(
+              requirement: r,
+              onToggleCompleted: widget.onToggleCompleted,
+              onToggleEnabled: widget.onToggleEnabled,
+              onShowModal: widget.onShowModal,
+              onDelete: widget.onDeleteRequirement,
+            ),
+          ),
+        if (totalPages > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PaginationButton(
+                icon: LucideIcons.chevronLeft,
+                enabled: safePage > 0,
+                onTap: () => setState(() => _page = safePage - 1),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 64,
+                child: Text(
+                  '${safePage + 1} / $totalPages',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.gray700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _PaginationButton(
+                icon: LucideIcons.chevronRight,
+                enabled: safePage < totalPages - 1,
+                onTap: () => setState(() => _page = safePage + 1),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Pulserende skeleton die getoond wordt terwijl een cover wordt geüpload.
+class _CoverUploadingSkeleton extends StatefulWidget {
+  const _CoverUploadingSkeleton();
+
+  @override
+  State<_CoverUploadingSkeleton> createState() =>
+      _CoverUploadingSkeletonState();
+}
+
+class _CoverUploadingSkeletonState extends State<_CoverUploadingSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, _) => Container(
+        color: AppTheme.orange50.withValues(alpha: _anim.value),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: AppTheme.orange500,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Afbeelding uploaden\u2026',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.orange700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

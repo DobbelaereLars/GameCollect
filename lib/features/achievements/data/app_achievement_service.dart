@@ -10,27 +10,27 @@ class AppAchievementService extends ChangeNotifier {
 
   static const String _shareCounterKey = 'share_count';
 
-  /// Fires whenever new achievements are unlocked. The shell listens to this
-  /// and shows a global snackbar. The value is cleared after being consumed.
+  /// Wordt gevuurd zodra nieuwe achievements worden ontgrendeld. De shell luistert
+  /// hierop en toont een globale snackbar. De waarde wordt gewist na verwerking.
   static final newlyUnlockedNotifier = ValueNotifier<List<AppAchievement>>([]);
 
-  // ── Stats computation ────────────────────────────────────────────────────
+  // ── Statistiekenberekening ────────────────────────────────────────────────────
 
   Future<Map<AchievementType, int>> _computeStats(
     List<CollectionItem> items,
   ) async {
-    // Total unique games
+    // Uniek totaalaantal games
     final uniqueApiIds = items.map((e) => e.apiId).toSet();
     final totalGames = uniqueApiIds.length;
 
-    // Physical games: unique apiIds where any entry is 'Fysiek' or 'Fysiek & Digitaal'
+    // Fysieke games: unieke apiIds waarbij een item 'Fysiek' of 'Fysiek & Digitaal' is
     final physicalApiIds = items
         .where((e) => e.format == 'Fysiek' || e.format == 'Fysiek & Digitaal')
         .map((e) => e.apiId)
         .toSet();
     final physicalGames = physicalApiIds.length;
 
-    // Completed games: unique apiIds where any entry is completed
+    // Voltooide games: unieke apiIds waarbij een item voltooid is
     final completedApiIds = <int>{};
     for (final id in uniqueApiIds) {
       final group = items.where((e) => e.apiId == id).toList();
@@ -41,13 +41,13 @@ class AppAchievementService extends ChangeNotifier {
     }
     final completedGames = completedApiIds.length;
 
-    // Total playtime in minutes
+    // Totale speelduur in minuten
     final totalPlaytimeMinutes = items.fold<int>(
       0,
       (sum, e) => sum + e.totalPlaytimeMinutes,
     );
 
-    // Distinct platforms
+    // Unieke platformen
     final platforms = <String>{};
     for (final item in items) {
       for (final p in item.selectedPlatforms) {
@@ -56,35 +56,35 @@ class AppAchievementService extends ChangeNotifier {
     }
     final platformCount = platforms.length;
 
-    // Notes written: count of unique games with non-empty notes
+    // Notities geschreven: aantal unieke games met niet-lege notities
     final notesWrittenApiIds = items
         .where((e) => e.notes.trim().isNotEmpty)
         .map((e) => e.apiId)
         .toSet();
     final notesWritten = notesWrittenApiIds.length;
 
-    // Online achievements loaded (count of games with achievementStates)
+    // Online achievements geladen (games met achievementStates)
     final onlineLoaded = items
         .where((e) => e.achievementStates.isNotEmpty)
         .map((e) => e.apiId)
         .toSet()
         .length;
 
-    // Digital games: unique apiIds where any entry is 'Digitaal' or 'Fysiek & Digitaal'
+    // Digitale games: unieke apiIds waarbij een item 'Digitaal' of 'Fysiek & Digitaal' is
     final digitalApiIds = items
         .where((e) => e.format == 'Digitaal' || e.format == 'Fysiek & Digitaal')
         .map((e) => e.apiId)
         .toSet();
     final digitalGames = digitalApiIds.length;
 
-    // Tags used: unique apiIds where any entry has at least one active tag
+    // Tags gebruikt: unieke apiIds waarbij een item minstens één actieve tag heeft
     final taggedApiIds = items
         .where((e) => e.activeTags.isNotEmpty)
         .map((e) => e.apiId)
         .toSet();
     final tagsUsed = taggedApiIds.length;
 
-    // Share count (from event counter)
+    // Deelcount (via gebeurtenisteller)
     final shareCount = await DatabaseHelper.instance.getEventCounter(
       _shareCounterKey,
     );
@@ -103,9 +103,9 @@ class AppAchievementService extends ChangeNotifier {
     };
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  // ── Publieke API ──────────────────────────────────────────────────────────────
 
-  /// Computes progress for every achievement and returns the full list.
+  /// Berekent voortgang voor elk achievement en geeft de volledige lijst terug.
   Future<List<AppAchievementProgress>> getProgress(
     List<CollectionItem> items,
   ) async {
@@ -132,8 +132,8 @@ class AppAchievementService extends ChangeNotifier {
         .toList(growable: false);
   }
 
-  /// Evaluates all achievements against current stats, unlocks newly eligible
-  /// ones, and returns a list of newly unlocked [AppAchievement]s.
+  /// Evalueert alle achievements aan de hand van de huidige statistieken,
+  /// ontgrendelt nieuwe en geeft de lijst van nieuw ontgrendelde terug.
   Future<List<AppAchievement>> checkAndUnlock(
     List<CollectionItem> items,
   ) async {
@@ -160,7 +160,7 @@ class AppAchievementService extends ChangeNotifier {
     return newlyUnlocked;
   }
 
-  /// Marks all currently unseen unlocked achievements as seen and returns them.
+  /// Markeert alle ongeziene ontgrendelde achievements als gezien en geeft ze terug.
   Future<List<AppAchievementProgress>> popNewlyUnlocked(
     List<AppAchievementProgress> progressList,
   ) async {
@@ -171,7 +171,7 @@ class AppAchievementService extends ChangeNotifier {
     return unseen;
   }
 
-  /// Records a share event (used by CollectionItemDetailPage after sharing).
+  /// Registreert een deelevenement (aangeroepen door CollectionItemDetailPage na het delen).
   Future<void> recordShareEvent(List<CollectionItem> items) async {
     await DatabaseHelper.instance.incrementEventCounter(_shareCounterKey);
     await checkAndUnlock(items);

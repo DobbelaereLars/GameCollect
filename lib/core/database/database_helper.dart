@@ -7,11 +7,12 @@ import '../../features/discover/domain/rawg_game.dart';
 
 import "package:flutter/foundation.dart";
 
-/// Generates a v4-style UUID using a CSPRNG. No external dependency required.
+/// Genereert een v4 UUID via een cryptografisch veilige willekeurigeidsgenerator.
+/// Geen externe afhankelijkheden vereist.
 String generateSyncId() {
   final r = Random.secure();
   final bytes = List<int>.generate(16, (_) => r.nextInt(256));
-  // RFC 4122 variant + version 4 bits.
+  // RFC 4122 variant- en versie-4-bits instellen.
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   String hex(int b) => b.toRadixString(16).padLeft(2, '0');
@@ -26,8 +27,8 @@ class DatabaseHelper extends ChangeNotifier {
 
   DatabaseHelper._init();
 
-  /// Clears the cached database reference so the next access re-opens it.
-  /// Call this before deleting the database file during an app reset.
+  /// Wist de gecachte databasereferentie zodat de volgende toegang hem opnieuw opent.
+  /// Roep dit aan voor het verwijderen van het databasebestand bij een app-reset.
   static void resetInstance() {
     _database = null;
   }
@@ -44,7 +45,7 @@ class DatabaseHelper extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -58,6 +59,7 @@ CREATE TABLE collection (
   title TEXT NOT NULL,
   coverUrl TEXT,
   customCoverPath TEXT,
+  cloudCoverUrl TEXT,
   publisher TEXT,
   format TEXT NOT NULL,
   selectedPlatforms TEXT NOT NULL,
@@ -174,7 +176,7 @@ CREATE TABLE IF NOT EXISTS game_achievements (
           "ALTER TABLE collection ADD COLUMN requirements TEXT NOT NULL DEFAULT '[]'",
         );
       } catch (_) {
-        // Column may already exist from an earlier migration
+        // Kolom kan al bestaan vanuit een eerdere migratie.
       }
     }
     if (oldVersion < 7) {
@@ -184,6 +186,9 @@ CREATE TABLE IF NOT EXISTS game_achievements (
       await db.execute(
         'ALTER TABLE collection ADD COLUMN startedPlayingAt TEXT',
       );
+    }
+    if (oldVersion < 12) {
+      await db.execute('ALTER TABLE collection ADD COLUMN cloudCoverUrl TEXT');
     }
     if (oldVersion < 8) {
       await db.execute(
@@ -214,7 +219,7 @@ CREATE TABLE IF NOT EXISTS settings (
 ''');
     }
     if (oldVersion < 11) {
-      // Add sync columns to syncable tables and backfill values.
+      // Voeg synchronisatiekolommen toe en vul bestaande rijen bij.
       await db.execute('ALTER TABLE collection ADD COLUMN syncId TEXT');
       await db.execute(
         'ALTER TABLE collection ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0',
@@ -229,7 +234,7 @@ CREATE TABLE IF NOT EXISTS settings (
       await db.execute(
         'ALTER TABLE event_counters ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0',
       );
-      // Backfill syncId per row + initial updatedAt = now.
+      // Vul syncId en beginwaarde van updatedAt in voor bestaande rijen.
       final now = DateTime.now().millisecondsSinceEpoch;
       final rows = await db.query('collection', columns: ['id']);
       for (final row in rows) {
@@ -252,6 +257,7 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
 
     final map = item.toMap();
+    // Wijs een nieuw syncId toe en stel de initiële updatedAt in.
     map['syncId'] = generateSyncId();
     map['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
     map['deletedAt'] = null;
@@ -264,7 +270,7 @@ CREATE TABLE IF NOT EXISTS settings (
     final db = await instance.database;
 
     final map = item.toMap();
-    // Preserve existing syncId; bump updatedAt; ensure deletedAt is cleared.
+    // Behoud het bestaande syncId; verhoog updatedAt; zorg dat deletedAt leeg is.
     map.remove('syncId');
     map['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
     map['deletedAt'] = null;
@@ -311,7 +317,7 @@ CREATE TABLE IF NOT EXISTS settings (
       whereArgs: [id],
       limit: 1,
     );
-    // Soft delete: set deletedAt + bump updatedAt so the change is pushed.
+    // Zachte verwijdering: stel deletedAt en updatedAt in zodat de wijziging gesynchroniseerd wordt.
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.update(
       'collection',
@@ -398,9 +404,11 @@ CREATE TABLE IF NOT EXISTS settings (
     return result.isNotEmpty;
   }
 
-  Future<void> insertAchievementsForGame(
+  /// Interne helper: schrijft achievements naar de database met het opgegeven [algorithm].
+  Future<void> _writeAchievementsForGame(
     int apiId,
     List<RawgAchievement> achievements,
+    ConflictAlgorithm algorithm,
   ) async {
     if (achievements.isEmpty) return;
     final db = await instance.database;
@@ -413,32 +421,24 @@ CREATE TABLE IF NOT EXISTS settings (
         'description': a.description,
         'imageUrl': a.imageUrl,
         'percent': a.percent,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }, conflictAlgorithm: algorithm);
     }
     await batch.commit(noResult: true);
     notifyListeners();
   }
 
+  /// Voegt achievements in; slaat duplicaten over (ignore bij conflict).
+  Future<void> insertAchievementsForGame(
+    int apiId,
+    List<RawgAchievement> achievements,
+  ) => _writeAchievementsForGame(apiId, achievements, ConflictAlgorithm.ignore);
+
+  /// Voegt achievements in of overschrijft bestaande (replace bij conflict).
   Future<void> upsertAchievementsForGame(
     int apiId,
     List<RawgAchievement> achievements,
-  ) async {
-    if (achievements.isEmpty) return;
-    final db = await instance.database;
-    final batch = db.batch();
-    for (final a in achievements) {
-      batch.insert('game_achievements', {
-        'apiId': apiId,
-        'rawgId': a.id,
-        'name': a.name,
-        'description': a.description,
-        'imageUrl': a.imageUrl,
-        'percent': a.percent,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-    await batch.commit(noResult: true);
-    notifyListeners();
-  }
+  ) =>
+      _writeAchievementsForGame(apiId, achievements, ConflictAlgorithm.replace);
 
   Future<List<Map<String, dynamic>>> getRawAchievementsForGame(
     int apiId,
@@ -483,8 +483,8 @@ CREATE TABLE IF NOT EXISTS settings (
 
   // ── App-level Achievements DAO ────────────────────────────────────────────
 
-  /// Returns a map of achievement id -> {unlockedAt, seenAt} for all rows
-  /// stored in the app_achievements table.
+  /// Geeft een map terug van achievement-id naar {unlockedAt, seenAt}
+  /// voor alle rijen in de app_achievements-tabel.
   Future<Map<String, Map<String, String?>>> getAppAchievements() async {
     final db = await instance.database;
     final rows = await db.query('app_achievements');
@@ -497,7 +497,7 @@ CREATE TABLE IF NOT EXISTS settings (
     };
   }
 
-  /// Marks an app-level achievement as unlocked (no-op if already unlocked).
+  /// Markeert een app-achievement als ontgrendeld (no-op als al ontgrendeld).
   Future<void> unlockAppAchievement(String id) async {
     final db = await instance.database;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -511,7 +511,7 @@ CREATE TABLE IF NOT EXISTS settings (
     notifyListeners();
   }
 
-  /// Marks a previously unlocked achievement as "seen" by the user.
+  /// Markeert een ontgrendeld achievement als "gezien" door de gebruiker.
   Future<void> markAppAchievementSeen(String id) async {
     final db = await instance.database;
     await db.update(
@@ -525,7 +525,7 @@ CREATE TABLE IF NOT EXISTS settings (
     );
   }
 
-  /// Returns the current value of an event counter (0 if not present).
+  /// Geeft de huidige waarde van een gebeurtenisteller terug (0 als niet aanwezig).
   Future<int> getEventCounter(String key) async {
     final db = await instance.database;
     final rows = await db.query(
@@ -538,7 +538,7 @@ CREATE TABLE IF NOT EXISTS settings (
     return rows.first['value'] as int? ?? 0;
   }
 
-  /// Increments an event counter by 1, inserting with value 1 if not present.
+  /// Verhoogt een gebeurtenisteller met 1; maakt hem aan met waarde 1 als hij nog niet bestaat.
   Future<void> incrementEventCounter(String key) async {
     final db = await instance.database;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -575,7 +575,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
   Future<bool> getNotificationsEnabled() async {
     final val = await getSetting('notificationsEnabled');
-    // Default to true if not set yet.
+    // Standaard ingeschakeld als nog niet ingesteld.
     return val == null || val == '1';
   }
 
@@ -588,15 +588,15 @@ CREATE TABLE IF NOT EXISTS settings (
     notifyListeners();
   }
 
-  /// When the notifications preference was last changed locally
-  /// (epoch ms). 0 if never explicitly set.
+  /// Tijdstip waarop de notificatievoorkeur lokaal het laatste is gewijzigd
+  /// (epoch ms). 0 als nooit expliciet ingesteld.
   Future<int> getNotificationsUpdatedAt() async {
     final raw = await getSetting('notificationsEnabledUpdatedAt');
     return int.tryParse(raw ?? '') ?? 0;
   }
 
-  /// Apply a notifications preference coming from sync. The caller is
-  /// responsible for re-scheduling/cancelling notifications.
+  /// Past een meldingenvoorkeur toe die vanuit synchronisatie binnenkomt. De aanroeper
+  /// is verantwoordelijk voor het opnieuw plannen of annuleren van meldingen.
   Future<void> applyRemoteNotificationsPreference({
     required bool enabled,
     required int updatedAt,
@@ -606,14 +606,13 @@ CREATE TABLE IF NOT EXISTS settings (
     notifyListeners();
   }
 
-  // ── Sync Helpers ──────────────────────────────────────────────────────────
-  // These are used by SyncService. They expose raw rows including sync
-  // metadata (syncId, updatedAt, deletedAt) so that bidirectional sync with
-  // Firestore can be implemented without leaking Firestore concerns into the
-  // model layer.
+  // ── Sync-helpers ──────────────────────────────────────────────────────────
+  // Gebruikt door SyncService. Stelt ruwe rijen bloot inclusief syncmetadata
+  // (syncId, updatedAt, deletedAt) zodat Firestore-logica buiten de modellaag
+  // kan worden gehouden.
 
-  /// All collection rows updated strictly after [sinceMs] (epoch milliseconds),
-  /// including soft-deleted tombstones. Each map contains all DB columns.
+  /// Alle collectierijen die strikt na [sinceMs] (epoch ms) zijn bijgewerkt,
+  /// inclusief zacht-verwijderde tombstones. Elke map bevat alle DB-kolommen.
   Future<List<Map<String, dynamic>>> getCollectionRowsChangedSince(
     int sinceMs,
   ) async {
@@ -666,9 +665,9 @@ CREATE TABLE IF NOT EXISTS settings (
     );
   }
 
-  /// Upsert a collection row coming from the cloud, keyed by [syncId].
-  /// Skips the write if the local row has a strictly newer [updatedAt].
-  /// Honors tombstones (deletedAt != null).
+  /// Voegt een collectierij uit de cloud in of werkt deze bij, op basis van [syncId].
+  /// Slaat de schrijfactie over als de lokale rij een nieuwere [updatedAt] heeft.
+  /// Respecteert tombstones (deletedAt != null).
   Future<void> applyRemoteCollectionRow(Map<String, dynamic> row) async {
     final syncId = row['syncId'] as String?;
     if (syncId == null) return;
@@ -684,6 +683,12 @@ CREATE TABLE IF NOT EXISTS settings (
       final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
       if (localUpdated >= remoteUpdated) return;
       final patch = Map<String, dynamic>.from(row)..remove('id');
+      // Behoud de lokale cloudCoverUrl als de remote null is maar lokaal al
+      // ingevuld — dit voorkomt dat een race-conditie de URL overschrijft.
+      if (patch['cloudCoverUrl'] == null &&
+          existing.first['cloudCoverUrl'] != null) {
+        patch['cloudCoverUrl'] = existing.first['cloudCoverUrl'];
+      }
       await db.update(
         'collection',
         patch,
@@ -745,7 +750,7 @@ CREATE TABLE IF NOT EXISTS settings (
     if (existing.isNotEmpty) {
       final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
       if (localUpdated >= remoteUpdated) return;
-      // Counters: take the larger value to be safe across devices.
+      // Tellers: neem de hoogste waarde voor veiligheid over meerdere toestellen.
       final remoteVal = (row['value'] as num?)?.toInt() ?? 0;
       final localVal = (existing.first['value'] as num?)?.toInt() ?? 0;
       await db.update(
@@ -767,8 +772,7 @@ CREATE TABLE IF NOT EXISTS settings (
     notifyListeners();
   }
 
-  /// Wipes all syncable user data locally. Used when the user chooses
-  /// "overwrite local with cloud" at first login.
+  /// Wist alle lokale syncbare gebruikersdata. Gebruikt bij "cloud overschrijft lokaal".
   Future<void> clearAllSyncableLocalData() async {
     final db = await instance.database;
     await db.delete('collection');
@@ -784,16 +788,15 @@ CREATE TABLE IF NOT EXISTS settings (
     notifyListeners();
   }
 
-  /// Forces every syncable row to be considered changed (updatedAt = now)
-  /// and clears local sync watermark. Used when the user chooses
-  /// "overwrite cloud with local" at first login.
+  /// Markeert elke syncbare rij als gewijzigd (updatedAt = nu) en wist het
+  /// lokale syncwatermerk. Gebruikt bij "lokaal overschrijft cloud".
   Future<void> markAllSyncableRowsDirty() async {
     final db = await instance.database;
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.execute('UPDATE collection SET updatedAt = ?', [now]);
     await db.execute('UPDATE app_achievements SET updatedAt = ?', [now]);
     await db.execute('UPDATE event_counters SET updatedAt = ?', [now]);
-    // Bump the notifications preference timestamp so it gets pushed too.
+    // Verhoog ook de notificatietijdstempel zodat die ook gepusht wordt.
     await setSetting('notificationsEnabledUpdatedAt', now.toString());
   }
 }
