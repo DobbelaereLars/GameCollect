@@ -31,7 +31,7 @@ Zorg dat je Flutter-versie overeenkomt met de versie in `.fvmrc`.
 
 ### 1. RAWG API-sleutel
 
-Maak een gratis account aan op [https://rawg.io/apiv2](https://rawg.io/apiv2) en kopieer je API-sleutel.
+Maak een gratis account aan op [https://rawg.io/apidocs](https://rawg.io/apidocs) en kopieer je API-sleutel.
 
 ```bash
 cp .env.example .env
