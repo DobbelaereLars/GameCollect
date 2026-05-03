@@ -3954,7 +3954,7 @@ class _CoverUploadingSkeletonState extends State<_CoverUploadingSkeleton>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, __) => Container(
+      builder: (_, _) => Container(
         color: AppTheme.orange50.withValues(alpha: _anim.value),
         child: Center(
           child: Column(

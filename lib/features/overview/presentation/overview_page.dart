@@ -1142,38 +1142,6 @@ class _CoverBadge extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-class _MiniProgressBar extends StatelessWidget {
-  const _MiniProgressBar({required this.ratio});
-
-  final double ratio;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppTheme.orange100,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: ratio.clamp(0.0, 1.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.orange500,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Playtime summary card
 // ─────────────────────────────────────────────────────────────────────────────
 
