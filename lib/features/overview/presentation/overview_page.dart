@@ -827,10 +827,11 @@ class _CollectionGameCardState extends State<_CollectionGameCard> {
   }
 
   Widget _coverWidget(CollectionItem item) {
-    if (item.customCoverPath != null) {
+    final localPath = item.customCoverPath;
+    if (localPath != null && File(localPath).existsSync()) {
       return SizedBox.expand(
         child: Image.file(
-          File(item.customCoverPath!),
+          File(localPath),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (ctx, err, stack) => Center(

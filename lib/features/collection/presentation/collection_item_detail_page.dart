@@ -1752,14 +1752,13 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
     await Directory('${dir.path}/covers').create(recursive: true);
     await File(picked.path).copy(destPath);
 
-    setState(() => _customCoverPath = destPath);
-    // Sla lokaal op zodat de UI direct reageert.
-    await _save();
-    // Upload naar Firebase Storage op de achtergrond.
+    // Upload eerst naar Firebase Storage, dan pas één keer opslaan zodat
+    // cloudCoverUrl en customCoverPath atomisch in de DB terechtkomen.
+    // Zo kan een tussentijdse app-reset nooit een "null cloudCoverUrl" achterlaten.
+    String? cloudUrl;
     try {
       final uid = _currentUid();
-      if (uid != null) {
-        if (itemId == null) return;
+      if (uid != null && itemId != null) {
         final ref = FirebaseStorage.instance.ref().child(
           'users/$uid/covers/$itemId.jpg',
         );
@@ -1767,13 +1766,19 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
           File(destPath),
           SettableMetadata(contentType: 'image/jpeg'),
         );
-        final url = await ref.getDownloadURL();
-        if (mounted) setState(() => _cloudCoverUrl = url);
-        await _save();
+        cloudUrl = await ref.getDownloadURL();
       }
     } catch (_) {
-      // Upload mislukt — lokale afbeelding blijft, cloud sync later.
+      // Upload mislukt — lokale afbeelding wordt wel opgeslagen, cloud sync later.
     }
+
+    if (mounted) {
+      setState(() {
+        _customCoverPath = destPath;
+        _cloudCoverUrl = cloudUrl;
+      });
+    }
+    await _save();
   }
 
   Future<void> _removeCover() async {
@@ -2165,10 +2170,45 @@ class _GameSettingsPageState extends State<_GameSettingsPage> {
         borderRadius: BorderRadius.circular(12),
         child: AspectRatio(
           aspectRatio: 16 / 9,
-          child: Image.network(
-            _cloudCoverUrl!,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => _buildCoverFallback(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                _cloudCoverUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _buildCoverFallback(),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x00000000), Color(0xAA000000)],
+                    ),
+                  ),
+                  child: TextButton.icon(
+                    onPressed: _showRestoreCoverSheet,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.trueWhite,
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                    ),
+                    icon: const Icon(LucideIcons.refreshCcw, size: 16),
+                    label: const Text(
+                      'Standaard afbeelding herstellen',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );

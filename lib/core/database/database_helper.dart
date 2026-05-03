@@ -683,6 +683,12 @@ CREATE TABLE IF NOT EXISTS settings (
       final localUpdated = (existing.first['updatedAt'] as num?)?.toInt() ?? 0;
       if (localUpdated >= remoteUpdated) return;
       final patch = Map<String, dynamic>.from(row)..remove('id');
+      // Behoud de lokale cloudCoverUrl als de remote null is maar lokaal al
+      // ingevuld — dit voorkomt dat een race-conditie de URL overschrijft.
+      if (patch['cloudCoverUrl'] == null &&
+          existing.first['cloudCoverUrl'] != null) {
+        patch['cloudCoverUrl'] = existing.first['cloudCoverUrl'];
+      }
       await db.update(
         'collection',
         patch,

@@ -70,25 +70,22 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// Wist alle lokale data en logt de gebruiker uit na bevestiging.
   Future<void> _resetApp(BuildContext context) async {
-    // Eerst uitloggen zodat het toestel geen sessietoken meer heeft.
-    // Clouddata blijft intact — de gebruiker kan later opnieuw inloggen.
-    if (AuthService.instance.isSignedIn) {
-      try {
-        await AuthService.instance.signOut();
-      } catch (_) {
-        // Best-effort; fouten negeren zodat de reset altijd voltooit.
-      }
-    }
-
-    // Close and delete the database file
+    // Sluit en verwijder de database EERST, vóór het uitloggen.
+    // Zo kan de SyncService-listener na signOut de DB niet meer openen.
     final db = await DatabaseHelper.instance.database;
     final dbPath = db.path;
     await db.close();
     DatabaseHelper.resetInstance();
-
     final file = File(dbPath);
     if (await file.exists()) {
       await file.delete();
+    }
+
+    // Dan uitloggen — de auth-listener kan de DB nu toch niet bereiken.
+    if (AuthService.instance.isSignedIn) {
+      try {
+        await AuthService.instance.signOut();
+      } catch (_) {}
     }
 
     if (!context.mounted) return;

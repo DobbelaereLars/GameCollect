@@ -103,11 +103,15 @@ class SyncService extends ChangeNotifier {
 
   /// Herlaadt het aantal niet-gesynchroniseerde lokale wijzigingen.
   Future<void> _refreshPendingCount() async {
-    final since = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
-    final count = await DatabaseHelper.instance.countLocalChangesSince(since);
-    if (count != _pendingChanges) {
-      _pendingChanges = count;
-      notifyListeners();
+    try {
+      final since = _lastSyncAt?.millisecondsSinceEpoch ?? 0;
+      final count = await DatabaseHelper.instance.countLocalChangesSince(since);
+      if (count != _pendingChanges) {
+        _pendingChanges = count;
+        notifyListeners();
+      }
+    } catch (_) {
+      // DB is mogelijk gesloten tijdens app-reset; stil negeren.
     }
   }
 
